@@ -130,7 +130,27 @@ class Agent:
         try:
             response = await self.agent.run(query)
             logger.info("Query processed successfully")
-            return response
+
+            # Extract message content from AgentRunResponse
+            # Check if response is a ChatMessage directly with text attribute
+            if hasattr(response, 'text'):
+                return str(response.text)
+            # Check if response has content attribute
+            elif hasattr(response, 'content'):
+                return str(response.content)
+            # Check if response has messages list
+            elif hasattr(response, 'messages') and response.messages:
+                # Get the last message content
+                last_message = response.messages[-1]
+                if hasattr(last_message, 'text'):
+                    return str(last_message.text)
+                elif hasattr(last_message, 'content'):
+                    return str(last_message.content)
+                else:
+                    return str(last_message)
+            else:
+                # Fallback to string representation
+                return str(response)
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")

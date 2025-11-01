@@ -99,12 +99,12 @@ class ButlerConfig:
     def _get_default_model_name(self) -> str:
         """Get default model name based on provider."""
         defaults = {
-            "openai": "gpt-4o",
+            "openai": "gpt-5-codex",
             "anthropic": "claude-3-5-sonnet-20241022",
             "gemini": "gemini-2.0-flash-exp",
-            "azure": "gpt-4",
+            "azure": "gpt-5-codex",
         }
-        return defaults.get(self.llm_provider, "gpt-4")
+        return defaults.get(self.llm_provider, "gpt-5-codex")
 
     def validate(self) -> None:
         """Validate configuration based on selected provider.

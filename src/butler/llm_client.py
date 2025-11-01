@@ -63,13 +63,13 @@ def _create_openai_client(config: ButlerConfig) -> Any:
         config: Butler configuration
 
     Returns:
-        OpenAI async client
+        OpenAI chat or responses client compatible with agent framework
     """
     try:
-        from openai import AsyncOpenAI
+        from agent_framework.openai import OpenAIChatClient, OpenAIResponsesClient
     except ImportError:
         raise ConfigurationError(
-            "OpenAI SDK not installed. Install with: pip install openai"
+            "Agent framework OpenAI support not installed. Install with: pip install agent-framework"
         )
 
     if not config.openai_api_key:
@@ -77,13 +77,35 @@ def _create_openai_client(config: ButlerConfig) -> Any:
             "OpenAI API key is required. Set OPENAI_API_KEY environment variable."
         )
 
-    client = AsyncOpenAI(
-        api_key=config.openai_api_key,
-        base_url=config.openai_base_url,
-        organization=config.openai_organization,
-    )
+    model_name = config.model_name or "gpt-5-codex"
 
-    logger.info(f"Created OpenAI client with model: {config.model_name}")
+    # gpt-5-codex requires the responses endpoint, use OpenAIResponsesClient
+    # gpt-5-mini and others use chat completions endpoint, use OpenAIChatClient
+    if "codex" in model_name.lower():
+        kwargs = {
+            "model_id": model_name,
+            "api_key": config.openai_api_key,
+        }
+        if config.openai_base_url:
+            kwargs["base_url"] = config.openai_base_url
+        if config.openai_organization:
+            kwargs["org_id"] = config.openai_organization
+
+        client = OpenAIResponsesClient(**kwargs)
+        logger.info(f"Created OpenAI Responses client with model: {model_name}")
+    else:
+        kwargs = {
+            "model_id": model_name,
+            "api_key": config.openai_api_key,
+        }
+        if config.openai_base_url:
+            kwargs["base_url"] = config.openai_base_url
+        if config.openai_organization:
+            kwargs["org_id"] = config.openai_organization
+
+        client = OpenAIChatClient(**kwargs)
+        logger.info(f"Created OpenAI Chat client with model: {model_name}")
+
     return client
 
 
@@ -168,6 +190,12 @@ def _create_azure_openai_client(config: ButlerConfig) -> Any:
         raise ConfigurationError(
             "Azure OpenAI deployment name is required. Set AZURE_OPENAI_DEPLOYMENT_NAME environment variable."
         )
+
+    # Set the deployment name in environment for AzureOpenAIResponsesClient
+    # The client internally looks for this environment variable
+    import os
+    os.environ['AZURE_OPENAI_RESPONSES_DEPLOYMENT_NAME'] = config.azure_openai_deployment
+    logger.debug(f"Set AZURE_OPENAI_RESPONSES_DEPLOYMENT_NAME to {config.azure_openai_deployment}")
 
     # Use Azure CLI credential or API key
     if config.azure_openai_api_key:
