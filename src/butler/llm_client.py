@@ -5,7 +5,7 @@ Microsoft Agent Framework, supporting OpenAI, Anthropic, Gemini, and Azure OpenA
 """
 
 import logging
-from typing import Any
+from typing import Any, Union
 
 from butler.config import ButlerConfig
 from butler.utils.errors import ConfigurationError
@@ -82,29 +82,22 @@ def _create_openai_client(config: ButlerConfig) -> Any:
 
     # gpt-5-codex requires the responses endpoint, use OpenAIResponsesClient
     # gpt-5-mini and others use chat completions endpoint, use OpenAIChatClient
+    client: Union[OpenAIResponsesClient, OpenAIChatClient]
     if "codex" in model_name.lower():
-        kwargs = {
-            "model_id": model_name,
-            "api_key": config.openai_api_key,
-        }
-        if config.openai_base_url:
-            kwargs["base_url"] = config.openai_base_url
-        if config.openai_organization:
-            kwargs["org_id"] = config.openai_organization
-
-        client = OpenAIResponsesClient(**kwargs)
+        client = OpenAIResponsesClient(
+            model_id=model_name,
+            api_key=config.openai_api_key,
+            base_url=config.openai_base_url,
+            org_id=config.openai_organization,
+        )
         logger.info(f"Created OpenAI Responses client with model: {model_name}")
     else:
-        kwargs = {
-            "model_id": model_name,
-            "api_key": config.openai_api_key,
-        }
-        if config.openai_base_url:
-            kwargs["base_url"] = config.openai_base_url
-        if config.openai_organization:
-            kwargs["org_id"] = config.openai_organization
-
-        client = OpenAIChatClient(**kwargs)
+        client = OpenAIChatClient(
+            model_id=model_name,
+            api_key=config.openai_api_key,
+            base_url=config.openai_base_url,
+            org_id=config.openai_organization,
+        )
         logger.info(f"Created OpenAI Chat client with model: {model_name}")
 
     return client
@@ -212,7 +205,7 @@ def _create_azure_openai_client(config: ButlerConfig) -> Any:
     else:
         # Use Azure CLI credential
         try:
-            credential = AzureCliCredential()
+            credential: Union[AzureCliCredential, DefaultAzureCredential] = AzureCliCredential()
             client = AzureOpenAIResponsesClient(
                 endpoint=config.azure_openai_endpoint,
                 model=config.azure_openai_deployment,
