@@ -5,6 +5,8 @@ tool execution, and cluster management operations.
 """
 
 import logging
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from agent_framework import ChatAgent
 
@@ -92,9 +94,9 @@ class Agent:
             raise
 
         # Prepare tools
-        tools = CLUSTER_TOOLS.copy()
+        tools: Sequence[Callable[..., Any]] = list(CLUSTER_TOOLS)
         if mcp_tools:
-            tools.extend(mcp_tools)
+            tools = list(tools) + mcp_tools
             logger.info(f"Registered {len(mcp_tools)} MCP tools")
 
         # Create middleware
@@ -108,7 +110,7 @@ class Agent:
                 instructions=SYSTEM_PROMPT,
                 tools=tools,
                 model=self.model_name if config.llm_provider != "azure" else None,
-                middleware=function_middleware,
+                middleware=list(function_middleware),
             )
 
             logger.info(f"Butler Agent initialized with {len(tools)} tools")

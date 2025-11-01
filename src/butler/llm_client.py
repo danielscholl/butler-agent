@@ -181,6 +181,7 @@ def _create_azure_openai_client(config: ButlerConfig) -> Any:
         logger.info("Created Azure OpenAI client with API key authentication")
     else:
         # Use Azure CLI credential
+        credential: AzureCliCredential | DefaultAzureCredential
         try:
             credential = AzureCliCredential()
             client = AzureOpenAIResponsesClient(
