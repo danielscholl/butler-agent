@@ -11,7 +11,7 @@ class ActivityTracker:
     """Singleton for tracking current agent activity."""
 
     _instance: Optional["ActivityTracker"] = None
-    _current_activity: Optional[str] = None
+    _current_activity: str | None = None
 
     def __new__(cls) -> "ActivityTracker":
         """Ensure only one instance exists."""
@@ -27,7 +27,7 @@ class ActivityTracker:
         """
         self._current_activity = message
 
-    def get_current(self) -> Optional[str]:
+    def get_current(self) -> str | None:
         """Get the current activity message.
 
         Returns:

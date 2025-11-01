@@ -3,7 +3,7 @@
 import json
 import logging
 import subprocess
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from butler.utils.errors import ClusterNotFoundError, KindCommandError
 
@@ -17,7 +17,7 @@ class ClusterStatus:
         """Initialize cluster status checker."""
         pass
 
-    def get_cluster_status(self, name: str) -> Dict[str, Any]:
+    def get_cluster_status(self, name: str) -> dict[str, Any]:
         """Get comprehensive cluster status.
 
         Args:
@@ -29,15 +29,13 @@ class ClusterStatus:
         Raises:
             ClusterNotFoundError: If cluster doesn't exist
         """
-        context = f"kind-{name}"
-
         try:
             nodes = self.get_node_status(name)
             if not nodes:
                 raise ClusterNotFoundError(f"Cluster '{name}' not found or not accessible")
 
             # Get basic cluster info
-            status = {
+            status: dict[str, Any] = {
                 "cluster_name": name,
                 "status": "running" if nodes else "unknown",
                 "nodes": nodes,
@@ -55,10 +53,10 @@ class ClusterStatus:
 
             return status
 
-        except subprocess.TimeoutExpired:
-            raise KindCommandError(f"Timeout while getting status for cluster '{name}'")
+        except subprocess.TimeoutExpired as e:
+            raise KindCommandError(f"Timeout while getting status for cluster '{name}'") from e
 
-    def get_node_status(self, name: str) -> List[Dict[str, Any]]:
+    def get_node_status(self, name: str) -> list[dict[str, Any]]:
         """Get status of all nodes in cluster.
 
         Args:
@@ -130,7 +128,7 @@ class ClusterStatus:
             logger.warning(f"Error getting node status: {e}")
             return []
 
-    def get_resource_usage(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_resource_usage(self, name: str) -> dict[str, Any] | None:
         """Get resource usage for cluster (requires metrics-server).
 
         Args:
@@ -182,7 +180,7 @@ class ClusterStatus:
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return None
 
-    def check_cluster_health(self, name: str) -> Dict[str, Any]:
+    def check_cluster_health(self, name: str) -> dict[str, Any]:
         """Check overall cluster health.
 
         Args:
@@ -191,7 +189,7 @@ class ClusterStatus:
         Returns:
             Dict with health check results
         """
-        health = {
+        health: dict[str, Any] = {
             "healthy": True,
             "checks": [],
         }
@@ -236,9 +234,7 @@ class ClusterStatus:
                 data = json.loads(result.stdout)
                 pods = data.get("items", [])
                 running_pods = sum(
-                    1
-                    for p in pods
-                    if p.get("status", {}).get("phase") in ["Running", "Succeeded"]
+                    1 for p in pods if p.get("status", {}).get("phase") in ["Running", "Succeeded"]
                 )
 
                 health["checks"].append(

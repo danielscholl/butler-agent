@@ -1,6 +1,6 @@
 """KinD cluster configuration templates and management."""
 
-from typing import Any, Dict
+from typing import Any
 
 # Minimal cluster configuration for quick testing
 MINIMAL_CONFIG = """kind: Cluster
@@ -56,7 +56,7 @@ nodes:
 - role: worker
 """
 
-TEMPLATES: Dict[str, str] = {
+TEMPLATES: dict[str, str] = {
     "minimal": MINIMAL_CONFIG,
     "default": DEFAULT_CONFIG,
     "custom": CUSTOM_CONFIG,

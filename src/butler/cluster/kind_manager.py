@@ -5,7 +5,6 @@ import logging
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List, Optional
 
 from butler.utils.errors import (
     ClusterAlreadyExistsError,
@@ -40,18 +39,18 @@ class KindManager:
             if result.returncode != 0:
                 raise KindCommandError("kind CLI is not available or not working correctly")
             logger.debug(f"kind version: {result.stdout.strip()}")
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             raise KindCommandError(
                 "kind CLI not found. Please install kind: https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
-            )
-        except subprocess.TimeoutExpired:
-            raise KindCommandError("kind version check timed out")
+            ) from e
+        except subprocess.TimeoutExpired as e:
+            raise KindCommandError("kind version check timed out") from e
 
     def create_cluster(
         self,
         name: str,
         config: str,
-        k8s_version: Optional[str] = None,
+        k8s_version: str | None = None,
     ) -> dict:
         """Create a new KinD cluster.
 
@@ -153,10 +152,10 @@ class KindManager:
                 "message": f"Cluster '{name}' deleted successfully",
             }
 
-        except subprocess.TimeoutExpired:
-            raise KindCommandError(f"Timeout while deleting cluster '{name}'")
+        except subprocess.TimeoutExpired as e:
+            raise KindCommandError(f"Timeout while deleting cluster '{name}'") from e
 
-    def list_clusters(self) -> List[str]:
+    def list_clusters(self) -> list[str]:
         """List all KinD clusters.
 
         Returns:
@@ -184,8 +183,8 @@ class KindManager:
 
             return clusters
 
-        except subprocess.TimeoutExpired:
-            raise KindCommandError("Timeout while listing clusters")
+        except subprocess.TimeoutExpired as e:
+            raise KindCommandError("Timeout while listing clusters") from e
 
     def cluster_exists(self, name: str) -> bool:
         """Check if a cluster exists.
@@ -234,8 +233,8 @@ class KindManager:
 
             return result.stdout
 
-        except subprocess.TimeoutExpired:
-            raise KindCommandError(f"Timeout while getting kubeconfig for '{name}'")
+        except subprocess.TimeoutExpired as e:
+            raise KindCommandError(f"Timeout while getting kubeconfig for '{name}'") from e
 
     def _get_node_count(self, name: str) -> int:
         """Get number of nodes in cluster.

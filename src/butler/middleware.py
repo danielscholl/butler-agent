@@ -5,7 +5,8 @@ in the agent request/response pipeline.
 """
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from agent_framework import ChatMessage, FunctionInvocationContext, FunctionMiddleware
 

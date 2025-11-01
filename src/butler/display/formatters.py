@@ -4,13 +4,13 @@ This module provides functions to format various data structures into
 Rich-formatted output for the console.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from rich.panel import Panel
 from rich.table import Table
 
 
-def format_cluster_status(status_dict: Dict[str, Any]) -> Table:
+def format_cluster_status(status_dict: dict[str, Any]) -> Table:
     """Format cluster status as a Rich table.
 
     Args:
@@ -43,7 +43,7 @@ def format_cluster_status(status_dict: Dict[str, Any]) -> Table:
     return table
 
 
-def format_cluster_list(clusters: List[str]) -> Table:
+def format_cluster_list(clusters: list[str]) -> Table:
     """Format cluster list as a Rich table.
 
     Args:
