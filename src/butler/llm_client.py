@@ -5,7 +5,7 @@ Microsoft Agent Framework, supporting OpenAI, Anthropic, Gemini, and Azure OpenA
 """
 
 import logging
-from typing import Any, Union
+from typing import Any
 
 from butler.config import ButlerConfig
 from butler.utils.errors import ConfigurationError
@@ -82,7 +82,7 @@ def _create_openai_client(config: ButlerConfig) -> Any:
 
     # gpt-5-codex requires the responses endpoint, use OpenAIResponsesClient
     # gpt-5-mini and others use chat completions endpoint, use OpenAIChatClient
-    client: Union[OpenAIResponsesClient, OpenAIChatClient]
+    client: OpenAIResponsesClient | OpenAIChatClient
     if "codex" in model_name.lower():
         client = OpenAIResponsesClient(
             model_id=model_name,
@@ -205,7 +205,7 @@ def _create_azure_openai_client(config: ButlerConfig) -> Any:
     else:
         # Use Azure CLI credential
         try:
-            credential: Union[AzureCliCredential, DefaultAzureCredential] = AzureCliCredential()
+            credential: AzureCliCredential | DefaultAzureCredential = AzureCliCredential()
             client = AzureOpenAIResponsesClient(
                 endpoint=config.azure_openai_endpoint,
                 model=config.azure_openai_deployment,

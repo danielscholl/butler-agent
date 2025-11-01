@@ -6,7 +6,7 @@ in the agent request/response pipeline.
 
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from agent_framework import ChatMessage, FunctionInvocationContext, FunctionMiddleware
 
@@ -28,7 +28,7 @@ async def logging_function_middleware(
     Returns:
         Result from next middleware
     """
-    tool_name = context.function_name
+    tool_name = context.function.name
     args = context.arguments
 
     logger.info(f"Tool call: {tool_name} with args: {args}")
@@ -59,7 +59,9 @@ async def logging_chat_middleware(
     user_messages = [m for m in messages if m.role == "user"]
     if user_messages:
         last_message = user_messages[-1]
-        logger.info(f"User query: {last_message.content[:100]}...")
+        # ChatMessage uses 'text' attribute, not 'content'
+        message_text = getattr(last_message, "text", str(last_message))
+        logger.info(f"User query: {message_text[:100]}...")
 
     try:
         result = await next(messages)
@@ -83,7 +85,7 @@ async def activity_tracking_middleware(
     Returns:
         Result from next middleware
     """
-    tool_name = context.function_name
+    tool_name = context.function.name
 
     # Update activity tracker
     activity_tracker.set_activity(f"Executing: {tool_name}")
@@ -104,6 +106,6 @@ def create_function_middleware() -> list[FunctionMiddleware]:
         List of middleware functions
     """
     return [
-        logging_function_middleware,
-        activity_tracking_middleware,
+        cast(FunctionMiddleware, logging_function_middleware),
+        cast(FunctionMiddleware, activity_tracking_middleware),
     ]

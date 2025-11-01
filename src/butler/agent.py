@@ -106,9 +106,9 @@ class Agent:
             self.agent = ChatAgent(
                 chat_client=self.llm_client,
                 instructions=SYSTEM_PROMPT,
-                tools=tools,
+                tools=tools,  # type: ignore[arg-type]
                 model=self.model_name if config.llm_provider != "azure" else None,
-                middleware=function_middleware,
+                middleware=function_middleware,  # type: ignore[arg-type]
             )
 
             logger.info(f"Butler Agent initialized with {len(tools)} tools")

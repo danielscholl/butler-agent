@@ -111,10 +111,10 @@ class TestButlerConfig:
     def test_get_provider_display_name(self):
         """Test getting provider display name."""
         test_cases = [
-            ("openai", "OpenAI gpt-4o"),
+            ("openai", "OpenAI gpt-5-codex"),
             ("anthropic", "Anthropic claude-3-5-sonnet-20241022"),
             ("gemini", "Google Gemini gemini-2.0-flash-exp"),
-            ("azure", "Azure OpenAI gpt-4"),
+            ("azure", "Azure OpenAI gpt-5-codex"),
         ]
 
         for provider, expected in test_cases:
@@ -138,10 +138,10 @@ class TestButlerConfig:
     def test_model_name_defaults(self):
         """Test default model names per provider."""
         test_cases = [
-            ("openai", "gpt-4o"),
+            ("openai", "gpt-5-codex"),
             ("anthropic", "claude-3-5-sonnet-20241022"),
             ("gemini", "gemini-2.0-flash-exp"),
-            ("azure", "gpt-4"),
+            ("azure", "gpt-5-codex"),
         ]
 
         for provider, expected_model in test_cases:
