@@ -1,7 +1,7 @@
 """Configuration management for Butler Agent.
 
 This module handles configuration loading from environment variables and .env files,
-including multi-provider LLM configuration (OpenAI, Anthropic, Gemini, Azure OpenAI).
+including multi-provider LLM configuration (OpenAI and Azure OpenAI).
 """
 
 import os
@@ -20,19 +20,13 @@ class ButlerConfig:
     """
 
     # LLM Provider Configuration
-    llm_provider: Literal["openai", "anthropic", "gemini", "azure"] = "azure"
+    llm_provider: Literal["openai", "azure"] = "azure"
     model_name: str | None = None
 
     # OpenAI Configuration
     openai_api_key: str | None = None
     openai_base_url: str | None = None
     openai_organization: str | None = None
-
-    # Anthropic Configuration
-    anthropic_api_key: str | None = None
-
-    # Gemini Configuration
-    gemini_api_key: str | None = None
 
     # Azure OpenAI Configuration
     azure_openai_endpoint: str | None = None
@@ -63,14 +57,6 @@ class ButlerConfig:
         self.openai_base_url = os.getenv("OPENAI_BASE_URL", self.openai_base_url)
         self.openai_organization = os.getenv("OPENAI_ORGANIZATION", self.openai_organization)
 
-        # Anthropic Configuration
-        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY", self.anthropic_api_key)
-
-        # Gemini Configuration
-        self.gemini_api_key = os.getenv(
-            "GEMINI_API_KEY", os.getenv("GOOGLE_API_KEY", self.gemini_api_key)
-        )
-
         # Azure OpenAI Configuration
         self.azure_openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", self.azure_openai_endpoint)
         self.azure_openai_api_key = os.getenv("AZURE_OPENAI_API_KEY", self.azure_openai_api_key)
@@ -100,8 +86,6 @@ class ButlerConfig:
         """Get default model name based on provider."""
         defaults = {
             "openai": "gpt-5-codex",
-            "anthropic": "claude-3-5-sonnet-20241022",
-            "gemini": "gemini-2.0-flash-exp",
             "azure": "gpt-5-codex",
         }
         return defaults.get(self.llm_provider, "gpt-5-codex")
@@ -118,18 +102,6 @@ class ButlerConfig:
                     "OpenAI API key is required when using OpenAI provider. "
                     "Set OPENAI_API_KEY environment variable."
                 )
-        elif self.llm_provider == "anthropic":
-            if not self.anthropic_api_key:
-                raise ValueError(
-                    "Anthropic API key is required when using Anthropic provider. "
-                    "Set ANTHROPIC_API_KEY environment variable."
-                )
-        elif self.llm_provider == "gemini":
-            if not self.gemini_api_key:
-                raise ValueError(
-                    "Gemini API key is required when using Gemini provider. "
-                    "Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable."
-                )
         elif self.llm_provider == "azure":
             if not self.azure_openai_endpoint:
                 raise ValueError(
@@ -144,8 +116,7 @@ class ButlerConfig:
             # API key is optional if using Azure CLI authentication
         else:
             raise ValueError(
-                f"Invalid LLM provider: {self.llm_provider}. "
-                "Must be one of: openai, anthropic, gemini, azure"
+                f"Invalid LLM provider: {self.llm_provider}. " "Must be one of: openai, azure"
             )
 
     def get_cluster_data_dir(self, cluster_name: str) -> Path:
@@ -178,8 +149,6 @@ class ButlerConfig:
         """
         provider_names = {
             "openai": "OpenAI",
-            "anthropic": "Anthropic",
-            "gemini": "Google Gemini",
             "azure": "Azure OpenAI",
         }
         provider = provider_names.get(self.llm_provider, self.llm_provider)

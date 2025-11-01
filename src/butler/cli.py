@@ -17,7 +17,7 @@ from rich.logging import RichHandler
 from rich.markdown import Markdown
 
 from butler import __version__
-from butler.agent import Agent
+from butler.agent import ButlerAgent
 from butler.config import ButlerConfig
 from butler.observability import initialize_observability
 from butler.utils.errors import ConfigurationError
@@ -157,7 +157,9 @@ def _render_startup_banner(config: ButlerConfig) -> None:
 
     console.print(f"    • kind: [{kind_style}]{kind_status}[/{kind_style}]")
 
-    console.print("\n[dim]Type 'exit' or 'quit' to exit, 'help' for help[/dim]\n")
+    console.print(
+        "\n[dim]Type 'exit' or 'quit' to exit, 'help' for help, '/new' for new conversation[/dim]\n"
+    )
 
 
 def _render_prompt_area(config: ButlerConfig) -> str:
@@ -198,10 +200,14 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
 
         # Create agent
         try:
-            agent = Agent(config)
+            agent = ButlerAgent(config)
         except Exception as e:
             console.print(f"[red]Failed to initialize agent: {e}[/red]")
             sys.exit(1)
+
+        # Create conversation thread for multi-turn conversations
+        thread = agent.get_new_thread()
+        message_count = 0
 
         # Setup prompt session with history
         history_file = Path.home() / ".butler_history"
@@ -234,17 +240,27 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
                         _render_startup_banner(config)
                     continue
 
-                # Execute query
+                # Handle /new command to start fresh conversation
+                if cmd in ["/new", "new"]:
+                    thread = agent.get_new_thread()
+                    message_count = 0
+                    console.print("[green]✓ Started new conversation[/green]\n")
+                    continue
+
+                # Execute query with conversation thread
                 if not quiet:
                     console.print()
 
                 with console.status("[bold blue]Thinking...", spinner="dots"):
-                    response = await agent.run(user_input)
+                    response = await agent.run(user_input, thread=thread)
+                    message_count += 1
 
                 # Display response
                 if response:
                     console.print()
                     console.print(Markdown(response))
+                    if not quiet and message_count > 1:
+                        console.print(f"\n[dim]({message_count} messages in conversation)[/dim]")
                     console.print()
 
             except KeyboardInterrupt:
@@ -295,12 +311,12 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
 
         # Create agent
         try:
-            agent = Agent(config)
+            agent = ButlerAgent(config)
         except Exception as e:
             console.print(f"[red]Failed to initialize agent: {e}[/red]")
             sys.exit(1)
 
-        # Execute query
+        # Execute query (single-turn, no thread persistence needed)
         if not quiet:
             console.print(f"\n[bold cyan]Query:[/bold cyan] {prompt}\n")
 
@@ -336,6 +352,7 @@ def _show_help() -> None:
 - **exit, quit, q** - Exit Butler
 - **help, ?** - Show this help
 - **clear** - Clear screen
+- **/new, new** - Start a new conversation (reset context)
 
 ## Example Queries
 
