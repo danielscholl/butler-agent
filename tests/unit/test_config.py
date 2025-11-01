@@ -111,10 +111,8 @@ class TestButlerConfig:
     def test_get_provider_display_name(self):
         """Test getting provider display name."""
         test_cases = [
-            ("openai", "OpenAI gpt-4o"),
-            ("anthropic", "Anthropic claude-3-5-sonnet-20241022"),
-            ("gemini", "Google Gemini gemini-2.0-flash-exp"),
-            ("azure", "Azure OpenAI gpt-4"),
+            ("openai", "OpenAI gpt-5-codex"),
+            ("azure", "Azure OpenAI gpt-5-codex"),
         ]
 
         for provider, expected in test_cases:
@@ -123,10 +121,6 @@ class TestButlerConfig:
             # Add required credentials for validation
             if provider == "openai":
                 env["OPENAI_API_KEY"] = "test"
-            elif provider == "anthropic":
-                env["ANTHROPIC_API_KEY"] = "test"
-            elif provider == "gemini":
-                env["GEMINI_API_KEY"] = "test"
             elif provider == "azure":
                 env["AZURE_OPENAI_ENDPOINT"] = "https://test.com"
                 env["AZURE_OPENAI_DEPLOYMENT_NAME"] = "gpt-4"
@@ -138,10 +132,8 @@ class TestButlerConfig:
     def test_model_name_defaults(self):
         """Test default model names per provider."""
         test_cases = [
-            ("openai", "gpt-4o"),
-            ("anthropic", "claude-3-5-sonnet-20241022"),
-            ("gemini", "gemini-2.0-flash-exp"),
-            ("azure", "gpt-4"),
+            ("openai", "gpt-5-codex"),
+            ("azure", "gpt-5-codex"),
         ]
 
         for provider, expected_model in test_cases:

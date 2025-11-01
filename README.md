@@ -10,8 +10,8 @@ Butler Agent provides a natural language interface for managing Kubernetes in Do
 
 ## Features
 
-- **Conversational Interface**: Manage clusters using natural language
-- **Multi-Provider LLM Support**: Works with OpenAI, Anthropic Claude, Google Gemini, and Azure OpenAI
+- **Conversational Interface**: Manage clusters using natural language with multi-turn conversation support
+- **Multi-Provider LLM Support**: Works with OpenAI and Azure OpenAI
 - **KinD Cluster Management**: Create, delete, list, and monitor local Kubernetes clusters
 - **Rich Console Output**: Beautiful formatted output with tables, panels, and progress indicators
 - **Intelligent Error Handling**: Context-aware error messages and troubleshooting suggestions
@@ -60,18 +60,6 @@ AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
 ```env
 LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-...
-```
-
-**Option C: Anthropic**
-```env
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-**Option D: Google Gemini**
-```env
-LLM_PROVIDER=gemini
-GEMINI_API_KEY=AIza...
 ```
 
 ### Basic Usage
@@ -164,7 +152,7 @@ butler --version          # Show version
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LLM_PROVIDER` | LLM provider (openai, anthropic, gemini, azure) | `azure` |
+| `LLM_PROVIDER` | LLM provider (openai, azure) | `azure` |
 | `MODEL_NAME` | Override default model for provider | Provider-specific |
 | `BUTLER_DATA_DIR` | Data directory for cluster configs | `./data` |
 | `BUTLER_CLUSTER_PREFIX` | Prefix for cluster names | `butler-` |
@@ -177,12 +165,6 @@ butler --version          # Show version
 - `OPENAI_API_KEY` (required)
 - `OPENAI_BASE_URL` (optional)
 - `OPENAI_ORGANIZATION` (optional)
-
-**Anthropic:**
-- `ANTHROPIC_API_KEY` (required)
-
-**Google Gemini:**
-- `GEMINI_API_KEY` or `GOOGLE_API_KEY` (required)
 
 **Azure OpenAI:**
 - `AZURE_OPENAI_ENDPOINT` (required)

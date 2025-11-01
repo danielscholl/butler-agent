@@ -1,3 +1,7 @@
+ai-specs/
+ai-examples/
+ai-docs/
+
 # Python
 __pycache__/
 *.py[cod]

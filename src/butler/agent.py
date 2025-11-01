@@ -1,16 +1,15 @@
 """Core Butler Agent implementation.
 
-This module provides the main Agent class that orchestrates LLM interactions,
-tool execution, and cluster management operations.
+This module provides the main ButlerAgent class that orchestrates LLM interactions,
+tool execution, and cluster management operations using Microsoft Agent Framework.
 """
 
 import logging
+from typing import Any
 
-from agent_framework import ChatAgent
-
+from butler.clients import create_chat_client
 from butler.cluster.tools import CLUSTER_TOOLS, initialize_tools
 from butler.config import ButlerConfig
-from butler.llm_client import create_llm_client, get_model_name
 from butler.middleware import create_function_middleware
 
 logger = logging.getLogger(__name__)
@@ -51,45 +50,64 @@ Your goal is to make Kubernetes infrastructure management simple and conversatio
 """
 
 
-class Agent:
-    """Butler Agent for conversational Kubernetes infrastructure management."""
+class ButlerAgent:
+    """Butler Agent for conversational Kubernetes infrastructure management.
+
+    This agent uses the Microsoft Agent Framework's client.create_agent() pattern
+    for proper framework integration and supports dependency injection for testing.
+    """
 
     def __init__(
         self,
-        config: ButlerConfig,
+        config: ButlerConfig | None = None,
+        chat_client: Any | None = None,
         mcp_tools: list | None = None,
     ):
         """Initialize Butler Agent.
 
         Args:
-            config: Butler configuration
+            config: Butler configuration (required if chat_client not provided)
+            chat_client: Optional chat client for dependency injection (testing)
             mcp_tools: Optional list of MCP tools to register
+
+        Raises:
+            ValueError: If neither config nor chat_client is provided
         """
-        self.config = config
-        self.provider = config.llm_provider
-        self.model_name = get_model_name(config)
+        # Require either config or chat_client
+        if config is None and chat_client is None:
+            raise ValueError("Either config or chat_client must be provided")
+
+        # Use provided config or create default
+        self.config = config or ButlerConfig()
 
         logger.info(
-            f"Initializing Butler Agent with provider: {config.get_provider_display_name()}"
+            f"Initializing Butler Agent with provider: {self.config.get_provider_display_name()}"
         )
 
-        # Validate configuration
-        try:
-            config.validate()
-        except ValueError as e:
-            logger.error(f"Configuration validation failed: {e}")
-            raise
+        # Validate configuration if provided
+        if config is not None:
+            try:
+                config.validate()
+            except ValueError as e:
+                logger.error(f"Configuration validation failed: {e}")
+                raise
 
         # Initialize cluster tools
-        initialize_tools(config)
+        initialize_tools(self.config)
 
-        # Create LLM client
-        try:
-            self.llm_client = create_llm_client(config)
-            logger.info(f"LLM client created successfully: {config.llm_provider}")
-        except Exception as e:
-            logger.error(f"Failed to create LLM client: {e}")
-            raise
+        # Create or use provided chat client
+        if chat_client is not None:
+            # Test mode: use provided mock client
+            self.chat_client = chat_client
+            logger.info("Using provided chat client (test mode)")
+        else:
+            # Production mode: create client from config
+            try:
+                self.chat_client = create_chat_client(self.config)
+                logger.info(f"Chat client created successfully: {self.config.llm_provider}")
+            except Exception as e:
+                logger.error(f"Failed to create chat client: {e}")
+                raise
 
         # Prepare tools
         tools = CLUSTER_TOOLS.copy()
@@ -98,50 +116,74 @@ class Agent:
             logger.info(f"Registered {len(mcp_tools)} MCP tools")
 
         # Create middleware
-        function_middleware = create_function_middleware()
+        middleware = create_function_middleware()
 
-        # Create chat agent
+        # Create agent using framework's create_agent() pattern
         try:
-            # ChatAgent expects a chat_client parameter (not client)
-            self.agent = ChatAgent(
-                chat_client=self.llm_client,
+            self.agent = self.chat_client.create_agent(
+                name="Butler",
                 instructions=SYSTEM_PROMPT,
                 tools=tools,
-                model=self.model_name if config.llm_provider != "azure" else None,
-                middleware=function_middleware,
+                middleware=middleware,
             )
 
             logger.info(f"Butler Agent initialized with {len(tools)} tools")
 
         except Exception as e:
-            logger.error(f"Failed to create chat agent: {e}")
+            logger.error(f"Failed to create agent: {e}")
             raise
 
-    async def run(self, query: str) -> str:
+    async def run(self, query: str, thread: Any | None = None) -> str:
         """Run a query through the agent.
 
         Args:
             query: User query
+            thread: Optional conversation thread for multi-turn conversations
 
         Returns:
-            Agent response
+            Agent response as string
         """
         logger.info(f"Processing query: {query[:100]}...")
 
         try:
-            response = await self.agent.run(query)
+            # Create new thread if not provided
+            if thread is None:
+                thread = self.get_new_thread()
+
+            response = await self.agent.run(query, thread=thread)
             logger.info("Query processed successfully")
-            return str(response)
+
+            # Extract message content from response
+            # Check if response is a ChatMessage directly with text attribute
+            if hasattr(response, "text"):
+                return str(response.text)
+            # Check if response has content attribute
+            elif hasattr(response, "content"):
+                return str(response.content)
+            # Check if response has messages list
+            elif hasattr(response, "messages") and response.messages:
+                # Get the last message content
+                last_message = response.messages[-1]
+                if hasattr(last_message, "text"):
+                    return str(last_message.text)
+                elif hasattr(last_message, "content"):
+                    return str(last_message.content)
+                else:
+                    return str(last_message)
+            else:
+                # Fallback to string representation
+                return str(response)
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")
             raise
 
-    async def run_stream(self, query: str):
+    async def run_stream(self, query: str, thread: Any | None = None):
         """Run a query through the agent with streaming response.
 
         Args:
             query: User query
+            thread: Optional conversation thread for multi-turn conversations
 
         Yields:
             Response chunks
@@ -149,9 +191,21 @@ class Agent:
         logger.info(f"Processing query (streaming): {query[:100]}...")
 
         try:
-            async for chunk in self.agent.run_stream(query):
+            # Create new thread if not provided
+            if thread is None:
+                thread = self.get_new_thread()
+
+            async for chunk in self.agent.run_stream(query, thread=thread):
                 yield chunk
 
         except Exception as e:
             logger.error(f"Error processing streaming query: {e}")
             raise
+
+    def get_new_thread(self) -> Any:
+        """Create a new conversation thread for multi-turn conversations.
+
+        Returns:
+            New AgentThread for maintaining conversation context
+        """
+        return self.agent.get_new_thread()
