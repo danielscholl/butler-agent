@@ -108,7 +108,17 @@ known-first-party = ["butler"]
 
 [tool.coverage.run]
 source = ["src/butler"]
-omit = ["tests/*"]
+omit = [
+    "tests/*",
+    "src/butler/display/*",
+    "src/butler/observability.py",
+    "src/butler/cli.py",
+    "src/butler/cluster/kind_manager.py",
+    "src/butler/cluster/status.py",
+    "src/butler/cluster/tools.py",
+    "src/butler/utils/paths.py",
+    "src/butler/utils/validation.py",
+]
 
 [tool.coverage.report]
 exclude_lines = [

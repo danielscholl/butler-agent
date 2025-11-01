@@ -1,5 +1,6 @@
 """Unit tests for ButlerAgent."""
 
+import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -39,14 +40,14 @@ class TestButlerAgentInitialization:
 
     def test_init_validates_config(self):
         """Test that invalid config raises validation error."""
-        # Create config with invalid provider settings
+        # Create config with invalid provider settings (defaults to azure)
         with patch.dict(os.environ, {}, clear=True):
             config = ButlerConfig(
-                llm_provider="openai",
-                openai_api_key=None,  # Missing required key
+                llm_provider="azure",
+                azure_openai_endpoint=None,  # Missing required endpoint
             )
 
-            with pytest.raises(ValueError, match="OpenAI API key is required"):
+            with pytest.raises(ValueError, match="Azure OpenAI endpoint is required"):
                 ButlerAgent(config=config)
 
     def test_init_with_mcp_tools(self, mock_chat_client, mock_config):

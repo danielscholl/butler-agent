@@ -1,7 +1,7 @@
 """Unit tests for chat client factory."""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -15,65 +15,85 @@ class TestCreateChatClient:
 
     def test_create_openai_client_success(self):
         """Test creating OpenAI client successfully."""
-        config = ButlerConfig(
-            llm_provider="openai",
-            openai_api_key="test-key",
-            model_name="gpt-5-mini",
-        )
-
-        with patch("agent_framework.openai.OpenAIChatClient") as mock_client:
-            create_chat_client(config)
-
-            # Verify OpenAIChatClient was called with correct params
-            mock_client.assert_called_once_with(
-                model_id="gpt-5-mini",
-                api_key="test-key",
-                base_url=None,
-                org_id=None,
+        with patch.dict(
+            os.environ,
+            {"LLM_PROVIDER": "openai", "OPENAI_API_KEY": "test-key"},
+            clear=True,
+        ):
+            config = ButlerConfig(
+                llm_provider="openai",
+                openai_api_key="test-key",
+                model_name="gpt-5-mini",
             )
+
+            with patch("agent_framework.openai.OpenAIChatClient") as mock_client:
+                create_chat_client(config)
+
+                # Verify OpenAIChatClient was called with correct params
+                mock_client.assert_called_once_with(
+                    model_id="gpt-5-mini",
+                    api_key="test-key",
+                    base_url=None,
+                    org_id=None,
+                )
 
     def test_create_openai_responses_client_for_codex(self):
         """Test creating OpenAI Responses client for codex model."""
-        config = ButlerConfig(
-            llm_provider="openai",
-            openai_api_key="test-key",
-            model_name="gpt-5-codex",
-        )
-
-        with patch("agent_framework.openai.OpenAIResponsesClient") as mock_client:
-            create_chat_client(config)
-
-            # Verify OpenAIResponsesClient was called
-            mock_client.assert_called_once_with(
-                model_id="gpt-5-codex",
-                api_key="test-key",
-                base_url=None,
-                org_id=None,
+        with patch.dict(
+            os.environ,
+            {"LLM_PROVIDER": "openai", "OPENAI_API_KEY": "test-key"},
+            clear=True,
+        ):
+            config = ButlerConfig(
+                llm_provider="openai",
+                openai_api_key="test-key",
+                model_name="gpt-5-codex",
             )
+
+            with patch("agent_framework.openai.OpenAIResponsesClient") as mock_client:
+                create_chat_client(config)
+
+                # Verify OpenAIResponsesClient was called
+                mock_client.assert_called_once_with(
+                    model_id="gpt-5-codex",
+                    api_key="test-key",
+                    base_url=None,
+                    org_id=None,
+                )
 
     def test_create_openai_client_with_custom_settings(self):
         """Test creating OpenAI client with custom base_url and org_id."""
-        config = ButlerConfig(
-            llm_provider="openai",
-            openai_api_key="test-key",
-            openai_base_url="https://custom.openai.com",
-            openai_organization="org-123",
-            model_name="gpt-5-mini",
-        )
-
-        with patch("agent_framework.openai.OpenAIChatClient") as mock_client:
-            create_chat_client(config)
-
-            mock_client.assert_called_once_with(
-                model_id="gpt-5-mini",
-                api_key="test-key",
-                base_url="https://custom.openai.com",
-                org_id="org-123",
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROVIDER": "openai",
+                "OPENAI_API_KEY": "test-key",
+                "OPENAI_BASE_URL": "https://custom.openai.com",
+                "OPENAI_ORGANIZATION": "org-123",
+            },
+            clear=True,
+        ):
+            config = ButlerConfig(
+                llm_provider="openai",
+                openai_api_key="test-key",
+                openai_base_url="https://custom.openai.com",
+                openai_organization="org-123",
+                model_name="gpt-5-mini",
             )
+
+            with patch("agent_framework.openai.OpenAIChatClient") as mock_client:
+                create_chat_client(config)
+
+                mock_client.assert_called_once_with(
+                    model_id="gpt-5-mini",
+                    api_key="test-key",
+                    base_url="https://custom.openai.com",
+                    org_id="org-123",
+                )
 
     def test_create_openai_client_missing_api_key(self):
         """Test creating OpenAI client without API key raises error."""
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {"LLM_PROVIDER": "openai"}, clear=True):
             config = ButlerConfig(
                 llm_provider="openai",
                 openai_api_key=None,
@@ -84,44 +104,63 @@ class TestCreateChatClient:
 
     def test_create_azure_client_success_with_api_key(self):
         """Test creating Azure OpenAI client with API key."""
-        config = ButlerConfig(
-            llm_provider="azure",
-            azure_openai_endpoint="https://test.openai.azure.com/",
-            azure_openai_deployment="gpt-4",
-            azure_openai_api_key="test-azure-key",
-            azure_openai_api_version="2025-03-01-preview",
-        )
-
-        with patch("agent_framework.azure.AzureOpenAIChatClient") as mock_client:
-            create_chat_client(config)
-
-            mock_client.assert_called_once_with(
-                endpoint="https://test.openai.azure.com/",
-                model="gpt-4",
-                api_version="2025-03-01-preview",
-                api_key="test-azure-key",
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROVIDER": "azure",
+                "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
+                "AZURE_OPENAI_DEPLOYMENT_NAME": "gpt-4",
+                "AZURE_OPENAI_API_KEY": "test-azure-key",
+            },
+            clear=True,
+        ):
+            config = ButlerConfig(
+                llm_provider="azure",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                azure_openai_deployment="gpt-4",
+                azure_openai_api_key="test-azure-key",
+                azure_openai_api_version="2025-03-01-preview",
             )
+
+            with patch("agent_framework.azure.AzureOpenAIChatClient") as mock_client:
+                create_chat_client(config)
+
+                mock_client.assert_called_once_with(
+                    endpoint="https://test.openai.azure.com/",
+                    model="gpt-4",
+                    api_version="2025-03-01-preview",
+                    api_key="test-azure-key",
+                )
 
     def test_create_azure_client_success_with_cli_credential(self):
         """Test creating Azure OpenAI client with Azure CLI credential."""
-        config = ButlerConfig(
-            llm_provider="azure",
-            azure_openai_endpoint="https://test.openai.azure.com/",
-            azure_openai_deployment="gpt-4",
-            azure_openai_api_key=None,
-        )
-
-        with (
-            patch("agent_framework.azure.AzureOpenAIChatClient") as mock_client,
-            patch("azure.identity.AzureCliCredential") as mock_credential,
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROVIDER": "azure",
+                "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
+                "AZURE_OPENAI_DEPLOYMENT_NAME": "gpt-4",
+            },
+            clear=True,
         ):
-            create_chat_client(config)
+            config = ButlerConfig(
+                llm_provider="azure",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                azure_openai_deployment="gpt-4",
+                azure_openai_api_key=None,
+            )
 
-            # Verify credential was created
-            mock_credential.assert_called_once()
+            with (
+                patch("agent_framework.azure.AzureOpenAIChatClient") as mock_client,
+                patch("azure.identity.AzureCliCredential") as mock_credential,
+            ):
+                create_chat_client(config)
 
-            # Verify client was created with credential
-            assert mock_client.call_args[1]["credential"] is not None
+                # Verify credential was created
+                mock_credential.assert_called_once()
+
+                # Verify client was created with credential
+                assert mock_client.call_args[1]["credential"] is not None
 
     def test_create_azure_client_missing_endpoint(self):
         """Test creating Azure client without endpoint raises error."""
