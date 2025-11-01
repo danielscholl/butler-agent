@@ -1,11 +1,11 @@
 """Table rendering utilities for Butler Agent."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 from rich.table import Table
 
 
-def create_cluster_table(data: List[Dict[str, Any]]) -> Table:
+def create_cluster_table(data: list[dict[str, Any]]) -> Table:
     """Create a table for cluster information.
 
     Args:
@@ -32,7 +32,7 @@ def create_cluster_table(data: List[Dict[str, Any]]) -> Table:
     return table
 
 
-def create_resource_table(data: Dict[str, Any]) -> Table:
+def create_resource_table(data: dict[str, Any]) -> Table:
     """Create a table for resource usage information.
 
     Args:
@@ -58,7 +58,7 @@ def create_resource_table(data: Dict[str, Any]) -> Table:
     return table
 
 
-def create_health_table(checks: List[Dict[str, Any]]) -> Table:
+def create_health_table(checks: list[dict[str, Any]]) -> Table:
     """Create a table for health check results.
 
     Args:

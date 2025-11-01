@@ -5,7 +5,6 @@ tool execution, and cluster management operations.
 """
 
 import logging
-from typing import Any, Optional
 
 from agent_framework import ChatAgent
 
@@ -58,7 +57,7 @@ class Agent:
     def __init__(
         self,
         config: ButlerConfig,
-        mcp_tools: Optional[list] = None,
+        mcp_tools: list | None = None,
     ):
         """Initialize Butler Agent.
 
@@ -70,7 +69,9 @@ class Agent:
         self.provider = config.llm_provider
         self.model_name = get_model_name(config)
 
-        logger.info(f"Initializing Butler Agent with provider: {config.get_provider_display_name()}")
+        logger.info(
+            f"Initializing Butler Agent with provider: {config.get_provider_display_name()}"
+        )
 
         # Validate configuration
         try:
@@ -130,7 +131,7 @@ class Agent:
         try:
             response = await self.agent.run(query)
             logger.info("Query processed successfully")
-            return response
+            return str(response)
 
         except Exception as e:
             logger.error(f"Error processing query: {e}")

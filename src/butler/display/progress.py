@@ -1,14 +1,13 @@
 """Progress indicators for long-running operations."""
 
 from contextlib import contextmanager
-from typing import Optional
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 
 @contextmanager
-def show_progress(message: str, console: Optional[Console] = None):
+def show_progress(message: str, console: Console | None = None):
     """Context manager to show progress indicator during operation.
 
     Args:
@@ -27,12 +26,12 @@ def show_progress(message: str, console: Optional[Console] = None):
         console=console,
         transient=True,
     ) as progress:
-        task = progress.add_task(message, total=None)
+        progress.add_task(message, total=None)
         yield progress
 
 
 @contextmanager
-def show_spinner(message: str, console: Optional[Console] = None):
+def show_spinner(message: str, console: Console | None = None):
     """Context manager to show a simple spinner.
 
     Args:

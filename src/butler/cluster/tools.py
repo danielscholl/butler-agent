@@ -4,7 +4,7 @@ These functions are exposed as tools that the AI agent can use to manage KinD cl
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any
 
 from butler.cluster.config import get_cluster_config
 from butler.cluster.kind_manager import KindManager
@@ -40,7 +40,7 @@ def create_cluster(
     name: str,
     config: str = "default",
     kubernetes_version: str | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create a new KinD cluster.
 
     This tool creates a new Kubernetes in Docker (KinD) cluster with the specified
@@ -84,9 +84,7 @@ def create_cluster(
         if _config:
             result["kubeconfig_path"] = str(_config.get_kubeconfig_path(name))
 
-        result["message"] = (
-            f"Cluster '{name}' created successfully with {result['nodes']} node(s)"
-        )
+        result["message"] = f"Cluster '{name}' created successfully with {result['nodes']} node(s)"
 
         return result
 
@@ -111,7 +109,7 @@ def create_cluster(
         }
 
 
-def delete_cluster(name: str, preserve_data: bool = True) -> Dict[str, Any]:
+def delete_cluster(name: str, preserve_data: bool = True) -> dict[str, Any]:
     """Delete a KinD cluster.
 
     This tool deletes an existing KinD cluster. The cluster and all its resources
@@ -163,7 +161,7 @@ def delete_cluster(name: str, preserve_data: bool = True) -> Dict[str, Any]:
         }
 
 
-def list_clusters() -> Dict[str, Any]:
+def list_clusters() -> dict[str, Any]:
     """List all KinD clusters.
 
     This tool lists all existing KinD clusters on the system.
@@ -185,9 +183,11 @@ def list_clusters() -> Dict[str, Any]:
         return {
             "clusters": clusters,
             "total": len(clusters),
-            "message": f"Found {len(clusters)} cluster(s)"
-            if clusters
-            else "No clusters found. Use create_cluster to create a new cluster.",
+            "message": (
+                f"Found {len(clusters)} cluster(s)"
+                if clusters
+                else "No clusters found. Use create_cluster to create a new cluster."
+            ),
         }
 
     except KindCommandError as e:
@@ -205,7 +205,7 @@ def list_clusters() -> Dict[str, Any]:
         }
 
 
-def cluster_status(name: str) -> Dict[str, Any]:
+def cluster_status(name: str) -> dict[str, Any]:
     """Get detailed status for a cluster.
 
     This tool provides comprehensive status information about a cluster including
@@ -264,7 +264,7 @@ def cluster_status(name: str) -> Dict[str, Any]:
         }
 
 
-def get_cluster_health(name: str) -> Dict[str, Any]:
+def get_cluster_health(name: str) -> dict[str, Any]:
     """Check health of a cluster.
 
     This tool performs health checks on a cluster including node readiness
