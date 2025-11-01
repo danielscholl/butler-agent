@@ -5,9 +5,9 @@ including multi-provider LLM configuration (OpenAI, Anthropic, Gemini, Azure Ope
 """
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from dotenv import load_dotenv
 
@@ -21,23 +21,23 @@ class ButlerConfig:
 
     # LLM Provider Configuration
     llm_provider: Literal["openai", "anthropic", "gemini", "azure"] = "azure"
-    model_name: Optional[str] = None
+    model_name: str | None = None
 
     # OpenAI Configuration
-    openai_api_key: Optional[str] = None
-    openai_base_url: Optional[str] = None
-    openai_organization: Optional[str] = None
+    openai_api_key: str | None = None
+    openai_base_url: str | None = None
+    openai_organization: str | None = None
 
     # Anthropic Configuration
-    anthropic_api_key: Optional[str] = None
+    anthropic_api_key: str | None = None
 
     # Gemini Configuration
-    gemini_api_key: Optional[str] = None
+    gemini_api_key: str | None = None
 
     # Azure OpenAI Configuration
-    azure_openai_endpoint: Optional[str] = None
-    azure_openai_api_key: Optional[str] = None
-    azure_openai_deployment: Optional[str] = None
+    azure_openai_endpoint: str | None = None
+    azure_openai_api_key: str | None = None
+    azure_openai_deployment: str | None = None
     azure_openai_api_version: str = "2025-03-01-preview"
 
     # Butler Configuration
@@ -47,7 +47,7 @@ class ButlerConfig:
     log_level: str = "info"
 
     # Observability Configuration (optional)
-    applicationinsights_connection_string: Optional[str] = None
+    applicationinsights_connection_string: str | None = None
 
     def __post_init__(self):
         """Load configuration from environment variables after initialization."""

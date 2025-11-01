@@ -51,9 +51,9 @@ def create_llm_client(config: ButlerConfig) -> Any:
         raise ConfigurationError(
             f"Failed to import SDK for provider '{provider}'. "
             f"Please ensure the required dependencies are installed. Error: {e}"
-        )
+        ) from e
     except Exception as e:
-        raise ConfigurationError(f"Failed to create LLM client for '{provider}': {e}")
+        raise ConfigurationError(f"Failed to create LLM client for '{provider}': {e}") from e
 
 
 def _create_openai_client(config: ButlerConfig) -> Any:
@@ -67,10 +67,11 @@ def _create_openai_client(config: ButlerConfig) -> Any:
     """
     try:
         from agent_framework.openai import OpenAIChatClient, OpenAIResponsesClient
-    except ImportError:
+    except ImportError as e:
         raise ConfigurationError(
-            "Agent framework OpenAI support not installed. Install with: pip install agent-framework"
-        )
+            "Agent framework OpenAI support not installed. "
+            "Install with: pip install agent-framework"
+        ) from e
 
     if not config.openai_api_key:
         raise ConfigurationError(
@@ -120,10 +121,10 @@ def _create_anthropic_client(config: ButlerConfig) -> Any:
     """
     try:
         from anthropic import AsyncAnthropic
-    except ImportError:
+    except ImportError as e:
         raise ConfigurationError(
             "Anthropic SDK not installed. Install with: pip install anthropic"
-        )
+        ) from e
 
     if not config.anthropic_api_key:
         raise ConfigurationError(
@@ -147,10 +148,10 @@ def _create_gemini_client(config: ButlerConfig) -> Any:
     """
     try:
         import google.generativeai as genai
-    except ImportError:
+    except ImportError as e:
         raise ConfigurationError(
             "Google Generative AI SDK not installed. Install with: pip install google-generativeai"
-        )
+        ) from e
 
     if not config.gemini_api_key:
         raise ConfigurationError(
@@ -176,10 +177,10 @@ def _create_azure_openai_client(config: ButlerConfig) -> Any:
     try:
         from agent_framework.azure import AzureOpenAIResponsesClient
         from azure.identity import AzureCliCredential, DefaultAzureCredential
-    except ImportError:
+    except ImportError as e:
         raise ConfigurationError(
             "Azure SDK not installed. Install with: pip install azure-identity agent-framework"
-        )
+        ) from e
 
     if not config.azure_openai_endpoint:
         raise ConfigurationError(
@@ -194,7 +195,8 @@ def _create_azure_openai_client(config: ButlerConfig) -> Any:
     # Set the deployment name in environment for AzureOpenAIResponsesClient
     # The client internally looks for this environment variable
     import os
-    os.environ['AZURE_OPENAI_RESPONSES_DEPLOYMENT_NAME'] = config.azure_openai_deployment
+
+    os.environ["AZURE_OPENAI_RESPONSES_DEPLOYMENT_NAME"] = config.azure_openai_deployment
     logger.debug(f"Set AZURE_OPENAI_RESPONSES_DEPLOYMENT_NAME to {config.azure_openai_deployment}")
 
     # Use Azure CLI credential or API key

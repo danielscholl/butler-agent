@@ -5,7 +5,6 @@ tool execution, and cluster management operations.
 """
 
 import logging
-from typing import Any, Optional
 
 from agent_framework import ChatAgent
 
@@ -58,7 +57,7 @@ class Agent:
     def __init__(
         self,
         config: ButlerConfig,
-        mcp_tools: Optional[list] = None,
+        mcp_tools: list | None = None,
     ):
         """Initialize Butler Agent.
 
@@ -70,7 +69,9 @@ class Agent:
         self.provider = config.llm_provider
         self.model_name = get_model_name(config)
 
-        logger.info(f"Initializing Butler Agent with provider: {config.get_provider_display_name()}")
+        logger.info(
+            f"Initializing Butler Agent with provider: {config.get_provider_display_name()}"
+        )
 
         # Validate configuration
         try:
@@ -133,18 +134,18 @@ class Agent:
 
             # Extract message content from AgentRunResponse
             # Check if response is a ChatMessage directly with text attribute
-            if hasattr(response, 'text'):
+            if hasattr(response, "text"):
                 return str(response.text)
             # Check if response has content attribute
-            elif hasattr(response, 'content'):
+            elif hasattr(response, "content"):
                 return str(response.content)
             # Check if response has messages list
-            elif hasattr(response, 'messages') and response.messages:
+            elif hasattr(response, "messages") and response.messages:
                 # Get the last message content
                 last_message = response.messages[-1]
-                if hasattr(last_message, 'text'):
+                if hasattr(last_message, "text"):
                     return str(last_message.text)
-                elif hasattr(last_message, 'content'):
+                elif hasattr(last_message, "content"):
                     return str(last_message.content)
                 else:
                     return str(last_message)

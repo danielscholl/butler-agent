@@ -5,16 +5,16 @@ telemetry, logging, and distributed tracing.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 # Global telemetry state
 _telemetry_enabled = False
-_connection_string: Optional[str] = None
+_connection_string: str | None = None
 
 
-def initialize_observability(connection_string: Optional[str] = None) -> bool:
+def initialize_observability(connection_string: str | None = None) -> bool:
     """Initialize observability with Azure Application Insights.
 
     Args:
@@ -74,7 +74,6 @@ def set_user_context(user_id: str) -> None:
     try:
         from opentelemetry import trace
 
-        tracer = trace.get_tracer(__name__)
         span = trace.get_current_span()
         if span:
             span.set_attribute("user.id", user_id)
@@ -84,7 +83,7 @@ def set_user_context(user_id: str) -> None:
         logger.debug(f"Failed to set user context: {e}")
 
 
-def set_session_context(session_id: str, thread_id: Optional[str] = None) -> None:
+def set_session_context(session_id: str, thread_id: str | None = None) -> None:
     """Set session context for telemetry.
 
     Args:
@@ -130,7 +129,7 @@ def set_custom_attributes(**kwargs: Any) -> None:
         logger.debug(f"Failed to set custom attributes: {e}")
 
 
-def track_event(name: str, properties: Optional[Dict[str, Any]] = None) -> None:
+def track_event(name: str, properties: dict[str, Any] | None = None) -> None:
     """Track a custom event.
 
     Args:

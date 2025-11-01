@@ -9,21 +9,18 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.markdown import Markdown
-from rich.panel import Panel
-from rich.table import Table
 
 from butler import __version__
 from butler.agent import Agent
 from butler.config import ButlerConfig
 from butler.observability import initialize_observability
-from butler.utils.errors import ButlerError, ConfigurationError
+from butler.utils.errors import ConfigurationError
 
 console = Console()
 
