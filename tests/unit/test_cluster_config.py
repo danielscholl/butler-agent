@@ -9,21 +9,21 @@ import yaml
 class TestClusterConfigTemplates:
     """Test cluster configuration templates."""
 
+    # Class-level constants to avoid duplication
+    TEMPLATE_DIR = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
+    TEMPLATE_NAMES = ["minimal", "default", "custom"]
+    TEMPLATE_FILES = [f"{name}.yaml" for name in TEMPLATE_NAMES]
+
     def test_builtin_templates_exist(self):
         """Test that all built-in template files exist."""
-        template_dir = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
-        
-        expected_templates = ["minimal.yaml", "default.yaml", "custom.yaml"]
-        for template in expected_templates:
-            template_path = template_dir / template
+        for template in self.TEMPLATE_FILES:
+            template_path = self.TEMPLATE_DIR / template
             assert template_path.exists(), f"Template file {template} should exist"
 
     def test_builtin_templates_valid_yaml(self):
         """Test that all built-in templates are valid YAML."""
-        template_dir = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
-        
-        for template in ["minimal.yaml", "default.yaml", "custom.yaml"]:
-            template_path = template_dir / template
+        for template in self.TEMPLATE_FILES:
+            template_path = self.TEMPLATE_DIR / template
             with open(template_path) as f:
                 content = f.read()
             
@@ -36,8 +36,7 @@ class TestClusterConfigTemplates:
 
     def test_minimal_template_structure(self):
         """Test minimal template has correct structure."""
-        template_dir = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
-        template_path = template_dir / "minimal.yaml"
+        template_path = self.TEMPLATE_DIR / "minimal.yaml"
         
         with open(template_path) as f:
             content = f.read()
@@ -55,8 +54,7 @@ class TestClusterConfigTemplates:
 
     def test_default_template_structure(self):
         """Test default template has correct structure."""
-        template_dir = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
-        template_path = template_dir / "default.yaml"
+        template_path = self.TEMPLATE_DIR / "default.yaml"
         
         with open(template_path) as f:
             content = f.read()
@@ -75,8 +73,7 @@ class TestClusterConfigTemplates:
 
     def test_custom_template_structure(self):
         """Test custom template has correct structure."""
-        template_dir = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
-        template_path = template_dir / "custom.yaml"
+        template_path = self.TEMPLATE_DIR / "custom.yaml"
         
         with open(template_path) as f:
             content = f.read()
@@ -93,10 +90,8 @@ class TestClusterConfigTemplates:
 
     def test_template_formatting(self):
         """Test that templates can be formatted with cluster name."""
-        template_dir = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
-        
-        for template_name in ["minimal", "default", "custom"]:
-            template_path = template_dir / f"{template_name}.yaml"
+        for template_name in self.TEMPLATE_NAMES:
+            template_path = self.TEMPLATE_DIR / f"{template_name}.yaml"
             with open(template_path) as f:
                 content = f.read()
             

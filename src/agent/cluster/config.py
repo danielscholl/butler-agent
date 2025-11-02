@@ -1,7 +1,7 @@
 """KinD cluster configuration templates and management."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Union
 
 import yaml
 
@@ -36,7 +36,8 @@ def _load_builtin_template(template_name: str) -> str:
 
 # Load built-in templates from YAML files
 # These are loaded lazily to avoid file I/O at import time
-TEMPLATES: dict[str, str] = {
+# Type is Union because values start as Callable and become str after loading
+TEMPLATES: dict[str, Union[str, Callable[[], str]]] = {
     "minimal": lambda: _load_builtin_template("minimal"),
     "default": lambda: _load_builtin_template("default"),
     "custom": lambda: _load_builtin_template("custom"),
