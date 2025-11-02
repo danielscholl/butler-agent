@@ -585,7 +585,7 @@ def run_check_command(target: str = "all") -> None:
 
     tools = {
         "docker": (["docker", "info"], True),  # (command, required)
-        "kubectl": (["kubectl", "version", "--client", "--short"], False),
+        "kubectl": (["kubectl", "version", "--client"], False),
         "kind": (["kind", "version"], False),
     }
 
