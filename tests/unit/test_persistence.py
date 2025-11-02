@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent.persistence import ThreadPersistence
+from agent.persistence import ThreadPersistence, _sanitize_conversation_name
 
 
 @pytest.fixture
@@ -258,3 +258,135 @@ class TestThreadPersistence:
 
         with pytest.raises(Exception, match="Deserialization failed"):
             await persistence.load_thread(mock_agent, name)
+
+
+class TestConversationNameSanitization:
+    """Test suite for conversation name sanitization (security)."""
+
+    def test_sanitize_valid_names(self):
+        """Test valid conversation names pass sanitization."""
+        valid_names = [
+            "my-conversation",
+            "test_conv_123",
+            "project-v1.2",
+            "backup.old",
+            "Test123",
+            "a",  # Minimum length
+            "a" * 64,  # Maximum length
+        ]
+
+        for name in valid_names:
+            result = _sanitize_conversation_name(name)
+            assert result == name.strip()
+
+    def test_sanitize_whitespace_trimming(self):
+        """Test whitespace is trimmed from names."""
+        assert _sanitize_conversation_name("  test  ") == "test"
+        assert _sanitize_conversation_name("\ttest\n") == "test"
+
+    def test_sanitize_rejects_empty_name(self):
+        """Test empty names are rejected."""
+        with pytest.raises(ValueError, match="between 1 and 64 characters"):
+            _sanitize_conversation_name("")
+
+        with pytest.raises(ValueError, match="between 1 and 64 characters"):
+            _sanitize_conversation_name("   ")
+
+    def test_sanitize_rejects_too_long(self):
+        """Test names over 64 characters are rejected."""
+        long_name = "a" * 65
+        with pytest.raises(ValueError, match="between 1 and 64 characters"):
+            _sanitize_conversation_name(long_name)
+
+    def test_sanitize_rejects_invalid_characters(self):
+        """Test names with invalid characters are rejected."""
+        invalid_names = [
+            "test conversation",  # Space
+            "test@conv",  # @
+            "test#conv",  # #
+            "test$conv",  # $
+            "test%conv",  # %
+            "test&conv",  # &
+            "test*conv",  # *
+            "test(conv",  # (
+            "test)conv",  # )
+            "test=conv",  # =
+            "test+conv",  # +
+            "test[conv",  # [
+            "test]conv",  # ]
+        ]
+
+        for name in invalid_names:
+            with pytest.raises(ValueError, match="can only contain"):
+                _sanitize_conversation_name(name)
+
+    def test_sanitize_rejects_path_traversal(self):
+        """Test path traversal attempts are rejected (security)."""
+        malicious_names = [
+            "../etc/passwd",
+            "..\\windows\\system32",
+            "..",
+            "test/../other",
+            "../../root",
+            ".hidden",
+            ".env",
+        ]
+
+        for name in malicious_names:
+            # These names should be rejected (various error messages possible)
+            with pytest.raises(ValueError):
+                _sanitize_conversation_name(name)
+
+    def test_sanitize_rejects_path_separators(self):
+        """Test path separators are rejected (security)."""
+        with pytest.raises(ValueError, match="can only contain"):
+            _sanitize_conversation_name("test/conversation")
+
+        with pytest.raises(ValueError, match="can only contain"):
+            _sanitize_conversation_name("test\\conversation")
+
+    def test_sanitize_rejects_reserved_names(self):
+        """Test reserved filesystem names are rejected."""
+        reserved_names = ["index", "metadata", "con", "prn", "aux", "nul", "INDEX", "CON"]
+
+        for name in reserved_names:
+            with pytest.raises(ValueError, match="Reserved name"):
+                _sanitize_conversation_name(name)
+
+    @pytest.mark.asyncio
+    async def test_save_with_malicious_name_rejected(self, persistence, mock_thread):
+        """Test saving thread with malicious name is rejected."""
+        malicious_names = [
+            "../malicious",
+            "../../etc/passwd",
+            ".hidden",
+            "test/path",
+            "con",
+        ]
+
+        for name in malicious_names:
+            with pytest.raises(ValueError):
+                await persistence.save_thread(mock_thread, name)
+
+    @pytest.mark.asyncio
+    async def test_load_with_malicious_name_rejected(self, persistence, mock_agent):
+        """Test loading thread with malicious name is rejected."""
+        malicious_names = [
+            "../malicious",
+            "../../etc/passwd",
+            ".hidden",
+        ]
+
+        for name in malicious_names:
+            with pytest.raises(ValueError):
+                await persistence.load_thread(mock_agent, name)
+
+    def test_delete_with_malicious_name_rejected(self, persistence):
+        """Test deleting conversation with malicious name is rejected."""
+        with pytest.raises(ValueError):
+            persistence.delete_conversation("../malicious")
+
+    def test_exists_with_malicious_name_rejected(self, persistence):
+        """Test checking existence with malicious name is rejected."""
+        with pytest.raises(ValueError):
+            persistence.conversation_exists("../malicious")
