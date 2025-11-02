@@ -403,7 +403,7 @@ class KindManager:
         Returns:
             Docker container name
         """
-        return f"kind-{cluster_name}-control-plane"
+        return f"{cluster_name}-control-plane"
 
     def _get_all_containers(self, cluster_name: str) -> list[str]:
         """Get all container names for a cluster (control-plane + workers).
