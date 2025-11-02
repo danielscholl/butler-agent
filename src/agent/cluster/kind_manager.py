@@ -4,6 +4,7 @@ import json
 import logging
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from agent.utils.errors import (
@@ -264,7 +265,6 @@ class KindManager:
 
         try:
             logger.info(f"Starting cluster '{name}'")
-            import time
 
             start_time = time.time()
 
@@ -505,8 +505,6 @@ class KindManager:
         Raises:
             KindCommandError: If API doesn't become ready in time
         """
-        import time
-
         context = f"kind-{name}"
         start_time = time.time()
 
@@ -524,6 +522,7 @@ class KindManager:
                     return
 
             except subprocess.TimeoutExpired:
+                # kubectl command timed out, continue retry loop
                 pass
 
             time.sleep(2)
