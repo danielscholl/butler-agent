@@ -16,6 +16,7 @@ from agent.middleware import create_middleware
 
 logger = logging.getLogger(__name__)
 
+
 class Agent:
     """Butler Agent for conversational Kubernetes infrastructure management.
 
@@ -146,7 +147,9 @@ class Agent:
             # Replace configuration placeholders
             system_prompt = system_prompt.replace("{{DATA_DIR}}", str(self.config.data_dir))
             system_prompt = system_prompt.replace("{{CLUSTER_PREFIX}}", self.config.cluster_prefix)
-            system_prompt = system_prompt.replace("{{K8S_VERSION}}", self.config.default_k8s_version)
+            system_prompt = system_prompt.replace(
+                "{{K8S_VERSION}}", self.config.default_k8s_version
+            )
 
             logger.info("System prompt loaded successfully from prompts/system.md")
             return system_prompt

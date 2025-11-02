@@ -46,7 +46,7 @@ jobs:
       continue-on-error: true
       run: |
         echo "::group::Black Formatting Check"
-        uv run black --check src/butler/ tests/ --diff --color
+        uv run black --check src/agent/ tests/ --diff --color
         echo "::endgroup::"
 
     - name: Lint with ruff
@@ -54,7 +54,7 @@ jobs:
       continue-on-error: true
       run: |
         echo "::group::Ruff Linting"
-        uv run ruff check src/butler/ tests/ --output-format=github
+        uv run ruff check src/agent/ tests/ --output-format=github
         echo "::endgroup::"
 
     - name: Type check with mypy
@@ -62,7 +62,7 @@ jobs:
       continue-on-error: true
       run: |
         echo "::group::MyPy Type Checking"
-        uv run mypy src/butler --pretty --color-output
+        uv run mypy src/agent --pretty --color-output
         echo "::endgroup::"
 
     # Run tests with coverage - continue on error to get results
@@ -73,7 +73,7 @@ jobs:
       run: |
         echo "::group::PyTest with Coverage"
         uv run pytest \
-          --cov=src/butler \
+          --cov=src/agent \
           --cov-report=xml \
           --cov-report=term-missing \
           --cov-fail-under=60 \
@@ -103,7 +103,7 @@ jobs:
         # Check each step's outcome
         if [[ "${{ steps.black.outcome }}" == "failure" ]]; then
           echo "❌ **Black formatting check failed**" >> $GITHUB_STEP_SUMMARY
-          echo "   Run \`black src/butler/ tests/\` locally to fix formatting issues" >> $GITHUB_STEP_SUMMARY
+          echo "   Run \`black src/agent/ tests/\` locally to fix formatting issues" >> $GITHUB_STEP_SUMMARY
         else
           echo "✅ Black formatting check passed" >> $GITHUB_STEP_SUMMARY
         fi
