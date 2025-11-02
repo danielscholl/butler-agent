@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 # Minimal cluster configuration for quick testing
 MINIMAL_CONFIG = """kind: Cluster
