@@ -83,10 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--check",
-        nargs="?",
-        const="all",
-        metavar="TOOL",
-        help="Run health check (optionally specify: docker, kubectl, kind)",
+        action="store_true",
+        help="Run health check for dependencies and configuration",
     )
 
     parser.add_argument(
@@ -498,7 +496,7 @@ def _show_help() -> None:
 ## CLI Commands
 
 - `butler` - Start interactive chat mode
-- `butler --check [TOOL]` - Run health check (optionally for specific tool)
+- `butler --check` - Run health check for dependencies and configuration
 - `butler --config` - Show current configuration
 - `butler -p "query"` - Execute single query and exit
 - `butler -v` - Enable verbose output
@@ -523,14 +521,11 @@ def _show_help() -> None:
 - "Delete the test-cluster"
 - "Create a minimal cluster called quick-test"
 
-## Health Checks
+## Health Check
 
-Check dependencies before using Butler:
+Verify dependencies and configuration:
 ```bash
-butler --check          # Check all tools
-butler --check docker   # Check Docker only
-butler --check kubectl  # Check kubectl only
-butler --check kind     # Check kind only
+butler --check
 ```
 
 ## Conversation Management
@@ -569,12 +564,8 @@ def _extract_version(output: str) -> str:
     return match.group(0) if match else ""
 
 
-def run_check_command(target: str = "all") -> None:
-    """Run health check command.
-
-    Args:
-        target: Specific tool to check (docker, kubectl, kind, all)
-    """
+def run_check_command() -> None:
+    """Run health check command."""
     import os
     import subprocess
 
@@ -592,9 +583,6 @@ def run_check_command(target: str = "all") -> None:
     all_passed = True
 
     for tool_name, (command, required) in tools.items():
-        # Skip if specific target requested and this isn't it
-        if target != "all" and target != tool_name:
-            continue
 
         try:
             result = subprocess.run(
@@ -734,8 +722,8 @@ async def async_main() -> None:
     args = parser.parse_args()
 
     # Handle check command
-    if args.check is not None:
-        run_check_command(target=args.check)
+    if args.check:
+        run_check_command()
         return
 
     # Handle config command
