@@ -61,12 +61,10 @@ Supports cluster lifecycle, health checks, and configuration management. Include
 ## Quick Setup
 
 ```bash
-# 1. Clone and install
-git clone https://github.com/danielscholl/butler-agent.git
-cd butler-agent
-uv sync
+# Install from source
+uv tool install git+https://github.com/danielscholl/butler-agent.git
 
-# 2. Configure required credentials
+# Configure required credentials
 cp .env.example .env
 ```
 
@@ -132,7 +130,6 @@ Key environment variables:
 
 ```bash
 # LLM Provider (required)
-LLM_PROVIDER=azure                                    # or 'openai'
 AZURE_OPENAI_ENDPOINT=https://....openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-codex
 
@@ -144,42 +141,9 @@ LOG_LEVEL=info                                        # Logging level
 
 See [.env.example](.env.example) for all options.
 
-## Development
-
-### Local Development
-
-```bash
-# Install with dev dependencies
-uv sync
-
-# Run quality checks
-uv run black src/agent/ tests/
-uv run ruff check src/agent/ tests/
-uv run mypy src/agent/
-uv run pytest --cov=src/agent --cov-fail-under=60
-```
-
-### CI/CD
-
-- **CI**: Black, Ruff, MyPy, Pytest (60% coverage minimum)
-- **Security**: CodeQL, dependency scanning, SBOM generation
-- **Releases**: Automated via [release-please](https://github.com/googleapis/release-please) with [Conventional Commits](https://www.conventionalcommits.org/)
-
-See [docs/ci-cd.md](docs/ci-cd.md) for details.
-
-## Roadmap
-
-- **Phase 1** (Current): KinD cluster management, conversation persistence, memory system
-- **Phase 2**: Component deployment (Istio, Elasticsearch, Postgres)
-- **Phase 3**: GitOps integration (Flux CD)
-- **Phase 4**: Software stack templates
-- **Phase 5**: Enhanced K8s operations (resource management, log analysis)
-
-See [docs/ARCHITECTURE_PLAN.md](docs/ARCHITECTURE_PLAN.md) for architecture details.
-
 ## Contributing
 
-Contributions welcome! Follow the OSDU community guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code quality guidelines, and contribution workflow.
 
 ## License
 
