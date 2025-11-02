@@ -120,6 +120,7 @@ class TestCreateChatClient:
                 azure_openai_deployment="gpt-4",
                 azure_openai_api_key="test-azure-key",
                 azure_openai_api_version="2025-03-01-preview",
+                model_name="gpt-4",  # Non-codex model to test ChatClient
             )
 
             with patch("agent_framework.azure.AzureOpenAIChatClient") as mock_client:
@@ -148,6 +149,7 @@ class TestCreateChatClient:
                 azure_openai_endpoint="https://test.openai.azure.com/",
                 azure_openai_deployment="gpt-4",
                 azure_openai_api_key=None,
+                model_name="gpt-4",  # Non-codex model to test ChatClient
             )
 
             with (
@@ -161,6 +163,37 @@ class TestCreateChatClient:
 
                 # Verify client was created with credential
                 assert mock_client.call_args[1]["credential"] is not None
+
+    def test_create_azure_responses_client_for_codex(self):
+        """Test creating Azure OpenAI ResponsesClient for codex models."""
+        with patch.dict(
+            os.environ,
+            {
+                "LLM_PROVIDER": "azure",
+                "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com/",
+                "AZURE_OPENAI_DEPLOYMENT_NAME": "gpt-5-codex",
+                "AZURE_OPENAI_API_KEY": "test-azure-key",
+            },
+            clear=True,
+        ):
+            config = AgentConfig(
+                llm_provider="azure",
+                azure_openai_endpoint="https://test.openai.azure.com/",
+                azure_openai_deployment="gpt-5-codex",
+                azure_openai_api_key="test-azure-key",
+                azure_openai_api_version="2025-03-01-preview",
+                model_name="gpt-5-codex",  # Codex model should use ResponsesClient
+            )
+
+            with patch("agent_framework.azure.AzureOpenAIResponsesClient") as mock_client:
+                create_chat_client(config)
+
+                mock_client.assert_called_once_with(
+                    endpoint="https://test.openai.azure.com/",
+                    deployment_name="gpt-5-codex",
+                    api_version="2025-03-01-preview",
+                    api_key="test-azure-key",
+                )
 
     def test_create_azure_client_missing_endpoint(self):
         """Test creating Azure client without endpoint raises error."""

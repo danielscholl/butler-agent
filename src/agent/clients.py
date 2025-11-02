@@ -99,10 +99,10 @@ def _create_azure_openai_client(config: AgentConfig):
         config: Butler configuration
 
     Returns:
-        Azure OpenAI chat client
+        Azure OpenAI chat or responses client
     """
     try:
-        from agent_framework.azure import AzureOpenAIChatClient
+        from agent_framework.azure import AzureOpenAIChatClient, AzureOpenAIResponsesClient
         from azure.identity import AzureCliCredential, DefaultAzureCredential
     except ImportError as e:
         raise ConfigurationError(
@@ -120,10 +120,23 @@ def _create_azure_openai_client(config: AgentConfig):
             "Set AZURE_OPENAI_DEPLOYMENT_NAME environment variable."
         )
 
+    model_name = config.model_name or "gpt-5-codex"
+
+    # Determine which client to use based on model
+    # gpt-5-codex requires the responses endpoint, use AzureOpenAIResponsesClient
+    # gpt-5-mini and others use chat completions endpoint, use AzureOpenAIChatClient
+    use_responses_client = "codex" in model_name.lower()
+    client_class = AzureOpenAIResponsesClient if use_responses_client else AzureOpenAIChatClient
+
+    logger.info(
+        f"Using {'AzureOpenAIResponsesClient' if use_responses_client else 'AzureOpenAIChatClient'} "
+        f"for model: {model_name}"
+    )
+
     # Use Azure CLI credential or API key
     if config.azure_openai_api_key:
         # Use API key authentication
-        client = AzureOpenAIChatClient(
+        client = client_class(
             endpoint=config.azure_openai_endpoint,
             deployment_name=config.azure_openai_deployment,
             api_version=config.azure_openai_api_version,
@@ -134,7 +147,7 @@ def _create_azure_openai_client(config: AgentConfig):
         # Use Azure CLI credential
         try:
             credential: AzureCliCredential | DefaultAzureCredential = AzureCliCredential()
-            client = AzureOpenAIChatClient(
+            client = client_class(
                 endpoint=config.azure_openai_endpoint,
                 deployment_name=config.azure_openai_deployment,
                 api_version=config.azure_openai_api_version,
@@ -145,7 +158,7 @@ def _create_azure_openai_client(config: AgentConfig):
             logger.warning(f"Azure CLI authentication failed: {e}")
             logger.info("Trying DefaultAzureCredential...")
             credential = DefaultAzureCredential()
-            client = AzureOpenAIChatClient(
+            client = client_class(
                 endpoint=config.azure_openai_endpoint,
                 deployment_name=config.azure_openai_deployment,
                 api_version=config.azure_openai_api_version,
