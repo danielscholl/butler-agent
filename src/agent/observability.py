@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 # Global telemetry state
 _telemetry_enabled = False
-_connection_string: str | None = None
 
 
 def initialize_observability(connection_string: str | None = None) -> bool:
@@ -23,13 +22,11 @@ def initialize_observability(connection_string: str | None = None) -> bool:
     Returns:
         True if initialized successfully, False otherwise
     """
-    global _telemetry_enabled, _connection_string
+    global _telemetry_enabled
 
     if not connection_string:
         logger.info("Observability not configured (no connection string provided)")
         return False
-
-    _connection_string = connection_string
 
     try:
         # Try to import Azure Monitor OpenTelemetry

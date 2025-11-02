@@ -149,6 +149,7 @@ def _render_status_bar(config: AgentConfig) -> None:
             if branch:
                 branch_display = f" [⎇ {branch}]"
     except Exception:
+        # Ignore git errors - branch display is optional
         pass
 
     # Format status bar
