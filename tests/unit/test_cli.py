@@ -84,7 +84,10 @@ class TestSingleQueryMode:
 
             # Verify agent was created and run was called
             mock_agent_class.assert_called_once_with(mock_config)
-            mock_agent.run.assert_called_once_with("test query")
+            # Now expects thread parameter (Phase 5 change)
+            assert mock_agent.run.called
+            assert mock_agent.run.call_args[0][0] == "test query"
+            assert "thread" in mock_agent.run.call_args[1]
 
     @pytest.mark.asyncio
     async def test_run_single_query_quiet_mode(self):
@@ -171,13 +174,11 @@ class TestInteractiveMode:
     def test_render_prompt_area(self):
         """Test prompt rendering."""
         from agent.cli import _render_prompt_area
-        from agent.config import AgentConfig
 
-        config = AgentConfig(llm_provider="openai")
-        prompt = _render_prompt_area(config)
+        # Phase 1-3 change: prompt is now just "> " (provider info moved to status bar)
+        prompt = _render_prompt_area()
 
-        assert "Butler" in prompt
-        assert "openai" in prompt
+        assert prompt == "> "
 
     def test_show_help(self):
         """Test help display."""

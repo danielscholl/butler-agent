@@ -606,9 +606,7 @@ def run_check_command(target: str = "all") -> None:
                 # Extract version if available
                 version = _extract_version(result.stdout)
                 version_display = f" ({version})" if version else ""
-                console.print(
-                    f" [green]●[/green] {tool_name}: ✓ Available{version_display}"
-                )
+                console.print(f" [green]●[/green] {tool_name}: ✓ Available{version_display}")
             else:
                 all_passed = False if required else all_passed
                 style = "red" if required else "yellow"
@@ -633,9 +631,7 @@ def run_check_command(target: str = "all") -> None:
             status = "exists, writable" if writable else "exists, read-only"
             console.print(f" [cyan]●[/cyan] Data Dir: {config.data_dir} ({status})")
         else:
-            console.print(
-                f" [yellow]●[/yellow] Data Dir: {config.data_dir} (will be created)"
-            )
+            console.print(f" [yellow]●[/yellow] Data Dir: {config.data_dir} (will be created)")
 
         console.print(f" [cyan]●[/cyan] K8s Version: {config.default_k8s_version}")
 
@@ -660,7 +656,7 @@ def run_config_command() -> None:
         # LLM Provider section
         console.print("[bold]LLM Provider:[/bold]")
         if config.llm_provider == "azure":
-            console.print(f" • Provider: [cyan]Azure OpenAI[/cyan]")
+            console.print(" • Provider: [cyan]Azure OpenAI[/cyan]")
             console.print(f" • Model: [cyan]{config.model_name}[/cyan]")
             console.print(f" • Endpoint: [cyan]{config.azure_openai_endpoint}[/cyan]")
             console.print(f" • Deployment: [cyan]{config.azure_openai_deployment}[/cyan]")
@@ -670,7 +666,7 @@ def run_config_command() -> None:
             else:
                 console.print(" • Auth: [cyan]Azure CLI / Managed Identity[/cyan]")
         elif config.llm_provider == "openai":
-            console.print(f" • Provider: [cyan]OpenAI[/cyan]")
+            console.print(" • Provider: [cyan]OpenAI[/cyan]")
             console.print(f" • Model: [cyan]{config.model_name}[/cyan]")
             if config.openai_base_url:
                 console.print(f" • Base URL: [cyan]{config.openai_base_url}[/cyan]")
