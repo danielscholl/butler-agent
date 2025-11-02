@@ -23,6 +23,7 @@ from agent.config import AgentConfig
 from agent.observability import initialize_observability
 from agent.persistence import ThreadPersistence
 from agent.utils.errors import ConfigurationError
+from agent.utils.terminal import clear_screen
 
 console = Console()
 
@@ -115,6 +116,12 @@ Butler manages Kubernetes clusters locally with natural language.
 [dim]Butler uses AI - always verify operations before executing.[/dim]
 """
     console.print(banner)
+
+
+def _render_minimal_header() -> None:
+    """Render minimal header after /clear command."""
+    console.print(" [cyan]☸[/cyan]  Butler")
+    console.print()
 
 
 def _render_status_bar(config: AgentConfig) -> None:
@@ -278,18 +285,21 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
                     _show_help()
                     continue
 
-                if cmd == "clear":
-                    console.clear()
-                    if not quiet:
-                        _render_startup_banner(config)
-                        _render_status_bar(config)
-                    continue
+                # Handle /clear command to clear screen and reset conversation context
+                if cmd in ["/clear", "clear"]:
+                    # Clear the screen
+                    if not clear_screen():
+                        console.print("[yellow]Warning: Failed to clear the screen.[/yellow]")
 
-                # Handle /new command to start fresh conversation
-                if cmd in ["/new", "new"]:
+                    # Reset conversation context
                     thread = agent.get_new_thread()
                     message_count = 0
-                    console.print("[green]✓ Started new conversation[/green]\n")
+
+                    # Display minimal header and status bar
+                    if not quiet:
+                        _render_minimal_header()
+                        _render_status_bar(config)
+
                     continue
 
                 # Handle /save command to save conversation
@@ -504,8 +514,7 @@ def _show_help() -> None:
 
 - **exit, quit, q** - Exit Butler
 - **help, ?** - Show this help
-- **clear** - Clear screen
-- **/new** - Start a new conversation (reset context)
+- **/clear** - Clear screen and reset conversation context
 - **/save <name>** - Save current conversation
 - **/load <name>** - Load a saved conversation
 - **/list** - List all saved conversations
