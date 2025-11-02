@@ -1,7 +1,6 @@
 """Unit tests for version management."""
 
 
-
 def test_version_format():
     """Test version follows semantic versioning format."""
     from agent import __version__
