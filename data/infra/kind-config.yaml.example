@@ -1,0 +1,57 @@
+# Example KinD Cluster Configuration
+# Copy this file to kind-config.yaml to use as the default custom configuration
+# Or create named configs like kind-dev.yaml, kind-prod.yaml, etc.
+#
+# Configuration Discovery Priority:
+# 1. Named custom configs: ./data/infra/kind-{config}.yaml
+# 2. Default custom config: ./data/infra/kind-config.yaml
+# 3. Built-in templates: minimal, default, custom
+#
+# See https://kind.sigs.k8s.io/docs/user/configuration/ for full documentation
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: {name}  # This will be replaced with your cluster name
+nodes:
+  # Control plane node with ingress ports exposed
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # HTTP
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      # HTTPS
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+      # Optional: Expose additional ports
+      # - containerPort: 8080
+      #   hostPort: 8080
+      #   protocol: TCP
+
+  # Worker node
+  - role: worker
+
+  # Optional: Add more worker nodes
+  # - role: worker
+  # - role: worker
+
+# Optional: Networking configuration
+# networking:
+#   podSubnet: "10.244.0.0/16"
+#   serviceSubnet: "10.96.0.0/12"
+#   disableDefaultCNI: false
+
+# Optional: Feature gates
+# featureGates:
+#   "EphemeralContainers": true
+
+# Optional: Runtime config
+# runtimeConfig:
+#   "api/all": "true"

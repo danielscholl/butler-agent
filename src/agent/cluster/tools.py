@@ -12,7 +12,9 @@ from agent.cluster.status import ClusterStatus
 from agent.config import AgentConfig
 from agent.utils.errors import (
     ClusterAlreadyExistsError,
+    ClusterAlreadyRunningError,
     ClusterNotFoundError,
+    ClusterNotRunningError,
     KindCommandError,
 )
 
@@ -46,10 +48,21 @@ def create_cluster(
     This tool creates a new Kubernetes in Docker (KinD) cluster with the specified
     configuration. The cluster will be running locally and ready for deployment.
 
+    Configuration discovery (automatic):
+    1. Named custom: ./data/infra/kind-{config}.yaml (when config != minimal/default/custom)
+    2. Default custom: ./data/infra/kind-config.yaml (when config = default/custom)
+    3. Built-in templates: Fallback for minimal/default/custom
+
+    Examples:
+    - create_cluster("dev", "production") → looks for kind-production.yaml
+    - create_cluster("app", "default") → looks for kind-config.yaml, falls back to built-in
+    - create_cluster("test", "minimal") → uses built-in minimal template
+
     Args:
         name: Name for the cluster (lowercase alphanumeric with hyphens)
-        config: Configuration template to use: "minimal", "default", or "custom"
-                (default: "default" - one control-plane and one worker node)
+        config: Configuration template or custom config name
+                Built-in templates: "minimal", "default", "custom"
+                Custom configs: any name (will look for kind-{name}.yaml)
         kubernetes_version: Kubernetes version to use (e.g., "v1.34.0", default: latest)
 
     Returns:
@@ -59,6 +72,7 @@ def create_cluster(
         - kubernetes_version: K8s version used
         - nodes: Number of nodes
         - kubeconfig_path: Path to kubeconfig file (if configured)
+        - config_source: Description of which config was used
         - message: Success message
 
     Raises:
@@ -69,13 +83,18 @@ def create_cluster(
         raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
 
     try:
-        # Get cluster configuration
-        cluster_config = get_cluster_config(config, name)
+        # Get cluster configuration with automatic discovery
+        cluster_config, config_source = get_cluster_config(
+            config, name, infra_dir=_config.get_infra_path()
+        )
 
         # Use configured default version if not specified
         k8s_version = kubernetes_version or _config.default_k8s_version
 
-        logger.info(f"Creating cluster '{name}' with template '{config}', version {k8s_version}")
+        logger.info(
+            f"Creating cluster '{name}' with config '{config}' ({config_source}), "
+            f"version {k8s_version}"
+        )
 
         # Create cluster
         result = _kind_manager.create_cluster(name, cluster_config, k8s_version)
@@ -84,7 +103,11 @@ def create_cluster(
         if _config:
             result["kubeconfig_path"] = str(_config.get_kubeconfig_path(name))
 
-        result["message"] = f"Cluster '{name}' created successfully with {result['nodes']} node(s)"
+        result["config_source"] = config_source
+        result["message"] = (
+            f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
+            f"using {config_source}"
+        )
 
         return result
 
@@ -93,6 +116,12 @@ def create_cluster(
             "success": False,
             "error": str(e),
             "message": f"Cluster '{name}' already exists. Use a different name or delete the existing cluster first.",
+        }
+    except (FileNotFoundError, ValueError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Configuration error: {e}",
         }
     except KindCommandError as e:
         return {
@@ -299,6 +328,189 @@ def get_cluster_health(name: str) -> dict[str, Any]:
         }
 
 
+def start_cluster(name: str) -> dict[str, Any]:
+    """Start a stopped KinD cluster.
+
+    This tool starts a previously stopped cluster without recreating it.
+    The cluster resumes with all its previous state and data intact.
+    This is useful for saving resources when not actively developing.
+
+    Args:
+        name: Name of the cluster to start
+
+    Returns:
+        Dict containing:
+        - cluster_name: Name of the cluster
+        - status: Cluster status ("running")
+        - startup_time_seconds: Time taken to start
+        - message: Success message
+
+    Raises:
+        ClusterNotFoundError: If cluster doesn't exist
+        ClusterAlreadyRunningError: If cluster is already running
+        KindCommandError: If startup fails
+    """
+    if not _kind_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(f"Starting cluster '{name}'")
+
+        result = _kind_manager.start_cluster(name)
+        result["message"] = (
+            f"Cluster '{name}' started successfully in {result['startup_time_seconds']} seconds"
+        )
+
+        return result
+
+    except ClusterNotFoundError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Cluster '{name}' not found. Use list_clusters to see available clusters.",
+        }
+    except ClusterAlreadyRunningError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Cluster '{name}' is already running.",
+        }
+    except KindCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to start cluster '{name}': {e}",
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error starting cluster '{name}'")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error starting cluster: {e}",
+        }
+
+
+def stop_cluster(name: str) -> dict[str, Any]:
+    """Stop a running KinD cluster without deleting it.
+
+    This tool stops a cluster to save resources while preserving all data
+    and configuration. The cluster can be restarted later with start_cluster.
+    Use this when you want to pause development without losing your work.
+
+    Note: This is different from delete_cluster - stopped clusters preserve
+    all state and can be restarted quickly.
+
+    Args:
+        name: Name of the cluster to stop
+
+    Returns:
+        Dict containing:
+        - cluster_name: Name of the cluster
+        - status: Cluster status ("stopped")
+        - message: Success message
+
+    Raises:
+        ClusterNotFoundError: If cluster doesn't exist
+        ClusterNotRunningError: If cluster is not running
+        KindCommandError: If stopping fails
+    """
+    if not _kind_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(f"Stopping cluster '{name}'")
+
+        result = _kind_manager.stop_cluster(name)
+        result["message"] = (
+            f"Cluster '{name}' stopped successfully. Data preserved. "
+            f"Use start_cluster to resume."
+        )
+
+        return result
+
+    except ClusterNotFoundError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Cluster '{name}' not found. Use list_clusters to see available clusters.",
+        }
+    except ClusterNotRunningError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Cluster '{name}' is not running.",
+        }
+    except KindCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to stop cluster '{name}': {e}",
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error stopping cluster '{name}'")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error stopping cluster: {e}",
+        }
+
+
+def restart_cluster(name: str) -> dict[str, Any]:
+    """Restart a KinD cluster (stop + start cycle).
+
+    This tool performs a quick restart of a cluster, useful during
+    development iteration when you need to reset the cluster state
+    or apply configuration changes. Faster than delete + recreate.
+
+    Args:
+        name: Name of the cluster to restart
+
+    Returns:
+        Dict containing:
+        - cluster_name: Name of the cluster
+        - status: Cluster status ("running")
+        - startup_time_seconds: Time taken to restart
+        - message: Success message
+
+    Raises:
+        ClusterNotFoundError: If cluster doesn't exist
+        KindCommandError: If restart fails
+    """
+    if not _kind_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(f"Restarting cluster '{name}'")
+
+        result = _kind_manager.restart_cluster(name)
+        result["message"] = (
+            f"Cluster '{name}' restarted successfully in "
+            f"{result['startup_time_seconds']} seconds"
+        )
+
+        return result
+
+    except ClusterNotFoundError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Cluster '{name}' not found. Use list_clusters to see available clusters.",
+        }
+    except KindCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to restart cluster '{name}': {e}",
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error restarting cluster '{name}'")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error restarting cluster: {e}",
+        }
+
+
 # Tool metadata for agent framework
 CLUSTER_TOOLS = [
     create_cluster,
@@ -306,4 +518,7 @@ CLUSTER_TOOLS = [
     list_clusters,
     cluster_status,
     get_cluster_health,
+    start_cluster,
+    stop_cluster,
+    restart_cluster,
 ]
