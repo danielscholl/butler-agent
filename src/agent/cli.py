@@ -23,6 +23,7 @@ from agent.config import AgentConfig
 from agent.observability import initialize_observability
 from agent.persistence import ThreadPersistence
 from agent.utils.errors import ConfigurationError
+from agent.utils.terminal import clear_screen
 
 console = Console()
 
@@ -286,10 +287,9 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
 
                 # Handle /clear command to clear screen and reset conversation context
                 if cmd in ["/clear", "clear"]:
-                    from agent.utils.terminal import clear_screen
-
                     # Clear the screen
-                    clear_screen()
+                    if not clear_screen():
+                        console.print("[yellow]Warning: Failed to clear the screen.[/yellow]")
 
                     # Reset conversation context
                     thread = agent.get_new_thread()
