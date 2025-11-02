@@ -150,5 +150,5 @@ jobs:
       if: matrix.python-version == '3.12'  # Only upload once
       continue-on-error: true  # Don't fail if service is down
       with:
-        file: ./coverage.xml
+        files: ./coverage.xml
         fail_ci_if_error: false
