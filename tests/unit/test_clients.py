@@ -127,7 +127,7 @@ class TestCreateChatClient:
 
                 mock_client.assert_called_once_with(
                     endpoint="https://test.openai.azure.com/",
-                    model="gpt-4",
+                    deployment_name="gpt-4",
                     api_version="2025-03-01-preview",
                     api_key="test-azure-key",
                 )
@@ -176,7 +176,10 @@ class TestCreateChatClient:
 
     def test_create_azure_client_missing_deployment(self):
         """Test creating Azure client without deployment name raises error."""
-        with patch.dict(os.environ, {}, clear=True):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("agent.config.load_dotenv"),  # Prevent loading .env file
+        ):
             config = AgentConfig(
                 llm_provider="azure",
                 azure_openai_endpoint="https://test.openai.azure.com/",

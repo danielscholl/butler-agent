@@ -125,7 +125,7 @@ def _create_azure_openai_client(config: AgentConfig):
         # Use API key authentication
         client = AzureOpenAIChatClient(
             endpoint=config.azure_openai_endpoint,
-            model=config.azure_openai_deployment,
+            deployment_name=config.azure_openai_deployment,
             api_version=config.azure_openai_api_version,
             api_key=config.azure_openai_api_key,
         )
@@ -136,7 +136,7 @@ def _create_azure_openai_client(config: AgentConfig):
             credential: AzureCliCredential | DefaultAzureCredential = AzureCliCredential()
             client = AzureOpenAIChatClient(
                 endpoint=config.azure_openai_endpoint,
-                model=config.azure_openai_deployment,
+                deployment_name=config.azure_openai_deployment,
                 api_version=config.azure_openai_api_version,
                 credential=credential,
             )
@@ -147,7 +147,7 @@ def _create_azure_openai_client(config: AgentConfig):
             credential = DefaultAzureCredential()
             client = AzureOpenAIChatClient(
                 endpoint=config.azure_openai_endpoint,
-                model=config.azure_openai_deployment,
+                deployment_name=config.azure_openai_deployment,
                 api_version=config.azure_openai_api_version,
                 credential=credential,
             )
