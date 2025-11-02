@@ -5,65 +5,70 @@ from typing import Any
 
 import yaml
 
-# Minimal cluster configuration for quick testing
-MINIMAL_CONFIG = """kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: {name}
-nodes:
-- role: control-plane
-"""
+# Template directory containing built-in KinD configurations
+_TEMPLATE_DIR = Path(__file__).parent / "templates"
 
-# Default cluster configuration with one control plane and one worker
-DEFAULT_CONFIG = """kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: {name}
-nodes:
-- role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-  extraPortMappings:
-  - containerPort: 80
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 443
-    hostPort: 443
-    protocol: TCP
-- role: worker
-"""
 
-# Custom multi-node cluster configuration
-CUSTOM_CONFIG = """kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: {name}
-nodes:
-- role: control-plane
-  kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
-    nodeRegistration:
-      kubeletExtraArgs:
-        node-labels: "ingress-ready=true"
-  extraPortMappings:
-  - containerPort: 80
-    hostPort: 80
-    protocol: TCP
-  - containerPort: 443
-    hostPort: 443
-    protocol: TCP
-- role: worker
-- role: worker
-- role: worker
-"""
+def _load_builtin_template(template_name: str) -> str:
+    """Load a built-in template from the templates directory.
 
+    Args:
+        template_name: Name of the template (e.g., 'minimal', 'default', 'custom')
+
+    Returns:
+        Template content as a string
+
+    Raises:
+        FileNotFoundError: If template file doesn't exist
+        ValueError: If template file cannot be read
+    """
+    template_path = _TEMPLATE_DIR / f"{template_name}.yaml"
+
+    if not template_path.exists():
+        raise FileNotFoundError(f"Built-in template not found: {template_path}")
+
+    try:
+        with open(template_path) as f:
+            return f.read()
+    except Exception as e:
+        raise ValueError(f"Error reading built-in template {template_path}: {e}") from e
+
+
+# Load built-in templates from YAML files
+# These are loaded lazily to avoid file I/O at import time
 TEMPLATES: dict[str, str] = {
-    "minimal": MINIMAL_CONFIG,
-    "default": DEFAULT_CONFIG,
-    "custom": CUSTOM_CONFIG,
+    "minimal": lambda: _load_builtin_template("minimal"),
+    "default": lambda: _load_builtin_template("default"),
+    "custom": lambda: _load_builtin_template("custom"),
 }
+
+
+def _get_template(template_name: str) -> str:
+    """Get a template by name, loading it if necessary.
+
+    Args:
+        template_name: Name of the template
+
+    Returns:
+        Template content as a string
+
+    Raises:
+        ValueError: If template doesn't exist
+    """
+    if template_name not in TEMPLATES:
+        raise ValueError(
+            f"Invalid template: {template_name}. Must be one of: {', '.join(TEMPLATES.keys())}"
+        )
+
+    template = TEMPLATES[template_name]
+    # If it's a lambda function, call it to load the template
+    if callable(template):
+        # Cache the loaded template
+        template_content = template()
+        TEMPLATES[template_name] = template_content
+        return template_content
+    # Already loaded and cached
+    return template
 
 
 def discover_config_file(config_name: str, infra_dir: Path) -> tuple[Path | None, str]:
@@ -197,7 +202,7 @@ def get_cluster_config(
         )
 
     # Use built-in template
-    config = TEMPLATES[template]
+    config = _get_template(template)
     variables = {"name": name, **kwargs}
     rendered_config = config.format(**variables)
 
