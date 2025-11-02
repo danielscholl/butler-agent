@@ -39,9 +39,8 @@ def _sanitize_conversation_name(name: str) -> str:
             "Conversation name can only contain letters, numbers, underscores, dashes, and dots"
         )
 
-    # Prevent path traversal attempts (defense-in-depth: regex above excludes slashes,
-    # but we explicitly check for common patterns as an additional safety layer)
-    if ".." in name or name.startswith(".") or "/" in name or "\\" in name:
+    # Prevent path traversal attempts (regex above already excludes slashes)
+    if ".." in name or name.startswith("."):
         raise ValueError("Invalid conversation name: path traversal not allowed")
 
     # Prevent reserved names
