@@ -374,8 +374,8 @@ butler -v -p "start {cluster-name}"  # Verbose output
 ls -la ./data/infra/
 
 # Check file naming (must be kind-{name}.yaml)
-# Check YAML syntax
-kind create cluster --config ./data/infra/kind-dev.yaml --dry-run
+# Check YAML syntax (validate before using)
+kind create cluster --config ./data/infra/kind-dev.yaml
 ```
 
 **Port conflicts:**

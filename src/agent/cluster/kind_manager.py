@@ -391,7 +391,8 @@ class KindManager:
             }
 
         except (ClusterNotRunningError, ClusterAlreadyRunningError):
-            # Handle edge cases - just try to start
+            # Edge cases: If cluster is already stopped or somehow already running,
+            # just ensure it ends up in running state by calling start
             return self.start_cluster(name)
 
     def _get_container_name(self, cluster_name: str) -> str:

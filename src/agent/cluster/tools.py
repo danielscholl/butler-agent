@@ -358,7 +358,7 @@ def start_cluster(name: str) -> dict[str, Any]:
 
         result = _kind_manager.start_cluster(name)
         result["message"] = (
-            f"Cluster '{name}' started successfully in " f"{result['startup_time_seconds']} seconds"
+            f"Cluster '{name}' started successfully in {result['startup_time_seconds']} seconds"
         )
 
         return result
