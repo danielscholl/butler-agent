@@ -450,9 +450,6 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
         # Execute query (single-turn, no thread persistence needed)
         import time
 
-        if not quiet:
-            console.print(f"\n[bold cyan]Query:[/bold cyan] {prompt}\n")
-
         start_time = time.time()
         thread = agent.get_new_thread()
 
@@ -464,6 +461,7 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
 
         # Display completion status with metrics
         if not quiet:
+            console.print()  # Add newline before metrics
             _render_completion_status(elapsed, 1, tool_count)
 
         # Display response
