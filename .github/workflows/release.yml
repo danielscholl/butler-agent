@@ -22,7 +22,7 @@ jobs:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
@@ -32,7 +32,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           ref: ${{ fromJson(steps.release.outputs.pr).headBranchName }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
       - name: Install uv
         if: ${{ steps.release.outputs.pr }}
