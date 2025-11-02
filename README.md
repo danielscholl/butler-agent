@@ -7,34 +7,41 @@ Conversational Kubernetes cluster management. AI-powered local infrastructure as
 
 ## Overview
 
-Manage Kubernetes in Docker (KinD) clusters using natural language. Create, configure, and monitor local development environments without memorizing complex commands.
+Manage Kubernetes in Docker (KinD) clusters using natural language. Create, start, stop, restart, and monitor local development environments without memorizing complex commands.
 
 ```bash
-# Start interactive chat
-butler
+butler -p "create a cluster called dev"
+# ✅ Cluster created in ~17s
 
- ☸  Welcome to Butler
+butler -p "stop dev"
+# ✅ Cluster stopped, data preserved
 
-Butler manages Kubernetes clusters locally with natural language.
-Butler uses AI - always verify operations before executing.
-
- ~/butler-agent [⎇ main]                                   gpt-5-codex · v0.1.0
-────────────────────────────────────────────────────────────────────────────────
-> create a cluster called dev
-☸ Complete (3.2s) - msg:1 tool:1
-
-☸ Cluster 'dev' created successfully with 2 nodes
-  • Kubeconfig: ./data/dev/kubeconfig
-  • Nodes: 1 control-plane, 1 worker
-
-────────────────────────────────────────────────────────────────────────────────
-> what clusters do I have?
-☸ Complete (1.5s) - msg:2 tool:1
-
-You have 1 cluster: dev (running, 2/2 nodes ready)
+butler -p "start dev"
+# ✅ Cluster started in ~5s
 ```
 
-Supports cluster lifecycle, health checks, and configuration management. Includes conversation persistence and preference learning.
+**[📖 Full Usage Guide](USAGE.md)** | **[🚀 Quick Start](#quick-setup)**
+
+## Features
+
+### ✨ Cluster Lifecycle Management
+- **Create**: Launch clusters with built-in templates or custom configurations
+- **Start/Stop**: Pause and resume clusters with state preservation (~5s startup)
+- **Restart**: Quick reset for development iteration
+- **Delete**: Clean removal of clusters and resources
+- **Status**: Health checks, node status, and resource monitoring
+
+### 🎛️ Custom Configurations
+- **File-based configs**: Define cluster architecture in `./data/infra/kind-*.yaml`
+- **Version control**: Commit cluster configs alongside your code
+- **Priority-based discovery**: Named configs → Default config → Built-in templates
+- **Example configs**: Comprehensive examples included
+
+### 🤖 AI-Powered Interface
+- **Natural language**: No command memorization needed
+- **Context-aware**: Understands intent from conversation
+- **Preference learning**: Remembers your patterns
+- **Conversation history**: Save and resume sessions
 
 ## Prerequisites
 
@@ -99,47 +106,29 @@ butler -p "create a minimal cluster called test"
 # Health check
 butler --check
 
-# Show configuration
-butler --config
-
 # Get help
 butler --help
 ```
 
-### Interactive Commands
-
-```
-/clear               # Clear screen and reset conversation context
-/save <name>         # Save conversation
-/load <name>         # Load saved conversation
-/list                # List saved conversations
-/delete <name>       # Delete conversation
-help                 # Show help
-exit                 # Exit butler
-```
-
-### Cluster Configurations
-
-- **Minimal** (1 node): `"create a minimal cluster"`
-- **Default** (2 nodes): `"create a cluster"` - includes port forwarding 80/443
-- **Custom** (4 nodes): `"create a custom cluster"` - simulates production
+**See [USAGE.md](USAGE.md) for comprehensive examples and advanced features.**
 
 ## Configuration
 
-Key environment variables:
+Configure via `.env` file:
 
 ```bash
-# LLM Provider (required)
+# Required
 AZURE_OPENAI_ENDPOINT=https://....openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-codex
 
-# Agent Settings (optional)
-BUTLER_DATA_DIR=./data                                # Cluster configs
-BUTLER_DEFAULT_K8S_VERSION=v1.34.0                    # K8s version
-LOG_LEVEL=info                                        # Logging level
+# Optional
+BUTLER_DATA_DIR=./data                    # Cluster configs and data
+BUTLER_INFRA_DIR=./data/infra             # Custom KinD configs
+BUTLER_DEFAULT_K8S_VERSION=v1.34.0        # Default K8s version
+LOG_LEVEL=info                            # debug, info, warning, error
 ```
 
-See [.env.example](.env.example) for all options.
+See [.env.example](.env.example) for complete configuration options.
 
 ## Contributing
 
