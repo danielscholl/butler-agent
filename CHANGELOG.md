@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.1...butler-agent-v0.1.2) (2025-11-02)
+
+
+### Bug Fixes
+
+* foundation security and correctness fixes ([#10](https://github.com/danielscholl/butler-agent/issues/10)) ([ecbf6ea](https://github.com/danielscholl/butler-agent/commit/ecbf6ea6fe8cd7d73755ee8c15e80fd225273c40))
+
 ## [0.1.1](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.0...butler-agent-v0.1.1) (2025-11-02)
 
 
