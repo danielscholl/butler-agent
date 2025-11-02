@@ -607,37 +607,49 @@ def run_check_command(target: str = "all") -> None:
                 # Extract version if available
                 version = _extract_version(result.stdout)
                 version_display = f" ({version})" if version else ""
-                console.print(f" [green]●[/green] {tool_name}: ✓ Available{version_display}")
+                console.print(
+                    f" [green]●[/green] {tool_name}: ✓ Available{version_display}",
+                    highlight=False,
+                )
             else:
                 all_passed = False if required else all_passed
                 style = "red" if required else "yellow"
-                console.print(f" [{style}]●[/{style}] {tool_name}: ✗ Not available")
+                console.print(
+                    f" [{style}]●[/{style}] {tool_name}: ✗ Not available", highlight=False
+                )
         except FileNotFoundError:
             all_passed = False if required else all_passed
             style = "red" if required else "yellow"
-            console.print(f" [{style}]●[/{style}] {tool_name}: ✗ Not installed")
+            console.print(f" [{style}]●[/{style}] {tool_name}: ✗ Not installed", highlight=False)
         except Exception as e:
             all_passed = False if required else all_passed
-            console.print(f" [yellow]●[/yellow] {tool_name}: ⚠ Check failed ({e})")
+            console.print(f" [yellow]●[/yellow] {tool_name}: ⚠ Check failed ({e})", highlight=False)
 
     # Check environment
     try:
         config = AgentConfig()
         console.print("\n[bold]Environment:[/bold]")
-        console.print(f" [cyan]●[/cyan] Provider: {config.get_provider_display_name()}")
+        console.print(
+            f" [cyan]●[/cyan] Provider: {config.get_provider_display_name()}", highlight=False
+        )
 
         data_dir = Path(config.data_dir)
         if data_dir.exists() and data_dir.is_dir():
             writable = os.access(data_dir, os.W_OK)
             status = "exists, writable" if writable else "exists, read-only"
-            console.print(f" [cyan]●[/cyan] Data Dir: {config.data_dir} ({status})")
+            console.print(
+                f" [cyan]●[/cyan] Data Dir: {config.data_dir} ({status})", highlight=False
+            )
         else:
-            console.print(f" [yellow]●[/yellow] Data Dir: {config.data_dir} (will be created)")
+            console.print(
+                f" [yellow]●[/yellow] Data Dir: {config.data_dir} (will be created)",
+                highlight=False,
+            )
 
-        console.print(f" [cyan]●[/cyan] K8s Version: {config.default_k8s_version}")
+        console.print(f" [cyan]●[/cyan] K8s Version: {config.default_k8s_version}", highlight=False)
 
     except Exception as e:
-        console.print(f" [red]●[/red] Configuration: ✗ Invalid ({e})")
+        console.print(f" [red]●[/red] Configuration: ✗ Invalid ({e})", highlight=False)
         all_passed = False
 
     # Summary
@@ -657,29 +669,42 @@ def run_config_command() -> None:
         # LLM Provider section
         console.print("[bold]LLM Provider:[/bold]")
         if config.llm_provider == "azure":
-            console.print(" • Provider: [cyan]Azure OpenAI[/cyan]")
-            console.print(f" • Model: [cyan]{config.model_name}[/cyan]")
-            console.print(f" • Endpoint: [cyan]{config.azure_openai_endpoint}[/cyan]")
-            console.print(f" • Deployment: [cyan]{config.azure_openai_deployment}[/cyan]")
-            console.print(f" • API Version: [cyan]{config.azure_openai_api_version}[/cyan]")
+            console.print(" • Provider: [cyan]Azure OpenAI[/cyan]", highlight=False)
+            console.print(f" • Model: [cyan]{config.model_name}[/cyan]", highlight=False)
+            console.print(
+                f" • Endpoint: [cyan]{config.azure_openai_endpoint}[/cyan]", highlight=False
+            )
+            console.print(
+                f" • Deployment: [cyan]{config.azure_openai_deployment}[/cyan]", highlight=False
+            )
+            console.print(
+                f" • API Version: [cyan]{config.azure_openai_api_version}[/cyan]",
+                highlight=False,
+            )
             if config.azure_openai_api_key:
-                console.print(" • Auth: [cyan]API Key[/cyan]")
+                console.print(" • Auth: [cyan]API Key[/cyan]", highlight=False)
             else:
-                console.print(" • Auth: [cyan]Azure CLI / Managed Identity[/cyan]")
+                console.print(" • Auth: [cyan]Azure CLI / Managed Identity[/cyan]", highlight=False)
         elif config.llm_provider == "openai":
-            console.print(" • Provider: [cyan]OpenAI[/cyan]")
-            console.print(f" • Model: [cyan]{config.model_name}[/cyan]")
+            console.print(" • Provider: [cyan]OpenAI[/cyan]", highlight=False)
+            console.print(f" • Model: [cyan]{config.model_name}[/cyan]", highlight=False)
             if config.openai_base_url:
-                console.print(f" • Base URL: [cyan]{config.openai_base_url}[/cyan]")
+                console.print(
+                    f" • Base URL: [cyan]{config.openai_base_url}[/cyan]", highlight=False
+                )
             if config.openai_organization:
-                console.print(f" • Organization: [cyan]{config.openai_organization}[/cyan]")
+                console.print(
+                    f" • Organization: [cyan]{config.openai_organization}[/cyan]", highlight=False
+                )
 
         # Agent Settings section
         console.print("\n[bold]Agent Settings:[/bold]")
-        console.print(f" • Data Directory: [cyan]{config.data_dir}[/cyan]")
-        console.print(f" • Cluster Prefix: [cyan]{config.cluster_prefix}[/cyan]")
-        console.print(f" • Default K8s Version: [cyan]{config.default_k8s_version}[/cyan]")
-        console.print(f" • Log Level: [cyan]{config.log_level}[/cyan]")
+        console.print(f" • Data Directory: [cyan]{config.data_dir}[/cyan]", highlight=False)
+        console.print(f" • Cluster Prefix: [cyan]{config.cluster_prefix}[/cyan]", highlight=False)
+        console.print(
+            f" • Default K8s Version: [cyan]{config.default_k8s_version}[/cyan]", highlight=False
+        )
+        console.print(f" • Log Level: [cyan]{config.log_level}[/cyan]", highlight=False)
 
         # Observability section
         console.print("\n[bold]Observability:[/bold]")
