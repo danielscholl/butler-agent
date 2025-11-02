@@ -266,6 +266,8 @@ class KindManager:
                 return len(data.get("items", []))
 
         except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError) as e:
-            logger.warning(f"Failed to get node count for cluster '{name}': {type(e).__name__}: {e}")
+            logger.warning(
+                f"Failed to get node count for cluster '{name}': {type(e).__name__}: {e}"
+            )
 
         return 0
