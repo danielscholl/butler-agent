@@ -1,380 +1,192 @@
 # Butler Agent
 
-[![CI](https://github.com/OWNER/REPO/workflows/CI/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
-[![Security](https://github.com/OWNER/REPO/workflows/Security%20Scanning/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/security.yml)
-[![codecov](https://codecov.io/gh/OWNER/REPO/branch/main/graph/badge.svg)](https://codecov.io/gh/OWNER/REPO)
+Conversational Kubernetes cluster management. AI-powered local infrastructure assistant.
 
-> AI-powered conversational DevOps agent for Kubernetes infrastructure management
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-Butler Agent provides a natural language interface for managing Kubernetes in Docker (KinD) clusters. Instead of memorizing complex commands, simply tell Butler what you want to do.
+## Overview
 
-## Features
-
-- **Conversational Interface**: Manage clusters using natural language with multi-turn conversation support
-- **Conversation Persistence**: Save and resume conversations across sessions
-- **Memory & Learning**: Agent learns your preferences and provides personalized suggestions
-- **Multi-Provider LLM Support**: Works with OpenAI and Azure OpenAI
-- **KinD Cluster Management**: Create, delete, list, and monitor local Kubernetes clusters
-- **Rich Console Output**: Beautiful formatted output with tables, panels, and progress indicators
-- **Intelligent Error Handling**: Context-aware error messages and troubleshooting suggestions
-- **Observability**: Optional Azure Application Insights integration with execution metrics
-
-## Quick Start
-
-### Prerequisites
-
-- Python 3.12 or higher
-- Docker (running)
-- kubectl (recommended)
-- kind (recommended)
-
-### Installation
+Manage Kubernetes in Docker (KinD) clusters using natural language. Create, configure, and monitor local development environments without memorizing complex commands.
 
 ```bash
-# Clone the repository
-cd butler-agent
+# Start interactive chat
+butler
 
-# Install with uv
-uv sync
+ ☸  Welcome to Butler
 
-# Or install as a tool
-uv tool install .
+Butler manages Kubernetes clusters locally with natural language.
+Butler uses AI - always verify operations before executing.
+
+ ~/butler-agent [⎇ main]                                   gpt-5-codex · v0.1.0
+────────────────────────────────────────────────────────────────────────────────
+> create a cluster called dev
+☸ Complete (3.2s) - msg:1 tool:1
+
+☸ Cluster 'dev' created successfully with 2 nodes
+  • Kubeconfig: ./data/dev/kubeconfig
+  • Nodes: 1 control-plane, 1 worker
+
+────────────────────────────────────────────────────────────────────────────────
+> what clusters do I have?
+☸ Complete (1.5s) - msg:2 tool:1
+
+You have 1 cluster: dev (running, 2/2 nodes ready)
 ```
 
-### Configuration
+Supports cluster lifecycle, health checks, and configuration management. Includes conversation persistence and preference learning.
 
-1. Copy the example environment file:
+## Prerequisites
+
+### Azure Resources (Cloud)
+
+**Required:**
+- [Azure OpenAI](https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource) deployment with a model (e.g., gpt-5-codex, gpt-4)
+
+**Optional (for observability):**
+- [Azure Application Insights](https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview) for telemetry
+
+### Local Tools (Client)
+
+**Required:**
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
+- Docker (running)
+
+**Optional:**
+- [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) - auth via `az login`
+- kubectl - for direct cluster access
+- kind - automatically verified by `butler --check`
+
+## Quick Setup
 
 ```bash
+# 1. Clone and install
+git clone https://github.com/danielscholl/butler-agent.git
+cd butler-agent
+uv sync
+
+# 2. Configure required credentials
 cp .env.example .env
 ```
 
-2. Configure your LLM provider in `.env`:
-
-**Option A: Azure OpenAI (default)**
-```env
-LLM_PROVIDER=azure
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4
-```
-
-**Option B: OpenAI**
-```env
-LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-...
-```
-
-### Basic Usage
-
-**Interactive Mode:**
+**Authenticate with CLI tools** (recommended):
 ```bash
+az login      # For Azure OpenAI
+```
+
+**OR use API keys** (if CLI not available):
+```bash
+# Edit .env file:
+# AZURE_OPENAI_API_KEY=your-key
+# AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+# AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-codex
+```
+
+**Verify setup**:
+```bash
+butler --check    # Check dependencies and configuration
+butler --config   # Show current configuration
+```
+
+## Usage
+
+```bash
+# Interactive chat mode
 butler
-```
 
-**Single Query Mode:**
-```bash
-butler -p "create a cluster called dev-env"
-butler -p "what clusters do I have?"
-butler -p "show status for dev-env"
-```
-
-## Example Conversations
-
-```
-You: Create a cluster called dev-env
-Butler: Creating KinD cluster "dev-env"...
-        ✓ Cluster created successfully with 2 nodes
-        • Kubeconfig: ./data/dev-env/kubeconfig
-        Your cluster is ready!
-
-You: What's the status?
-Butler: Cluster 'dev-env' is running with 2/2 nodes ready
-
-        ┌─────────────────────────────────┐
-        │ Cluster Status: dev-env         │
-        ├────────────┬────────────────────┤
-        │ Property   │ Value              │
-        ├────────────┼────────────────────┤
-        │ Status     │ running            │
-        │ Nodes      │ 2                  │
-        │ Ready      │ 2                  │
-        └────────────┴────────────────────┘
-
-You: Delete dev-env
-Butler: Are you sure you want to delete cluster 'dev-env'?
-        This action cannot be undone. (yes/no)
-
-You: yes
-Butler: ✓ Cluster 'dev-env' deleted successfully
-```
-
-## Conversation Management
-
-Butler now supports saving and resuming conversations, allowing you to maintain context across sessions:
-
-```bash
-# Save your current conversation
-/save my-dev-setup
-
-# List all saved conversations
-/list
-
-# Load a previous conversation
-/load my-dev-setup
-
-# Delete a saved conversation
-/delete old-conversation
-
-# Start a fresh conversation (reset context)
-/new
-```
-
-Conversations are automatically saved to `~/.butler/conversations/` and include all context, preferences, and history.
-
-## Memory & Learning
-
-Butler learns from your interactions to provide a personalized experience:
-
-- **Cluster Preferences**: Remembers your preferred cluster configurations (minimal, default, custom)
-- **Naming Patterns**: Learns and suggests cluster naming patterns based on your history
-- **Kubernetes Versions**: Remembers your preferred K8s versions
-- **Usage Metrics**: Tracks session statistics and successful operations
-
-The agent will provide smarter suggestions based on your past behavior!
-
-## Cluster Configurations
-
-Butler supports three cluster configurations:
-
-### Minimal (1 node)
-```bash
+# Single query
 butler -p "create a minimal cluster called test"
-```
-- 1 control-plane node
-- Fastest startup
-- Minimal resource usage
 
-### Default (2 nodes)
+# Health check
+butler --check
+
+# Show configuration
+butler --config
+
+# Get help
+butler --help
+```
+
+### Interactive Commands
+
+```
+/new                 # Start fresh conversation
+/save <name>         # Save conversation
+/load <name>         # Load saved conversation
+/list                # List saved conversations
+/delete <name>       # Delete conversation
+help                 # Show help
+exit                 # Exit butler
+```
+
+### Cluster Configurations
+
+- **Minimal** (1 node): `"create a minimal cluster"`
+- **Default** (2 nodes): `"create a cluster"` - includes port forwarding 80/443
+- **Custom** (4 nodes): `"create a custom cluster"` - simulates production
+
+## Configuration
+
+Key environment variables:
+
 ```bash
-butler -p "create a cluster called dev"
-```
-- 1 control-plane node
-- 1 worker node
-- Port forwarding for HTTP/HTTPS (80, 443)
-- Suitable for most development scenarios
+# LLM Provider (required)
+LLM_PROVIDER=azure                                    # or 'openai'
+AZURE_OPENAI_ENDPOINT=https://....openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-codex
 
-### Custom (4 nodes)
-```bash
-butler -p "create a custom cluster called prod-sim"
-```
-- 1 control-plane node
-- 3 worker nodes
-- Port forwarding for HTTP/HTTPS
-- Simulates production-like environment
-
-## CLI Options
-
-```
-butler                    # Interactive chat mode
-butler -p "query"         # Single query mode
-butler -q                 # Quiet mode (minimal output)
-butler -v                 # Verbose mode (debug logging)
-butler --version          # Show version
+# Agent Settings (optional)
+BUTLER_DATA_DIR=./data                                # Cluster configs
+BUTLER_DEFAULT_K8S_VERSION=v1.34.0                    # K8s version
+LOG_LEVEL=info                                        # Logging level
 ```
 
-## Configuration Reference
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LLM_PROVIDER` | LLM provider (openai, azure) | `azure` |
-| `MODEL_NAME` | Override default model for provider | Provider-specific |
-| `BUTLER_DATA_DIR` | Data directory for cluster configs | `./data` |
-| `BUTLER_CLUSTER_PREFIX` | Prefix for cluster names | `butler-` |
-| `BUTLER_DEFAULT_K8S_VERSION` | Default Kubernetes version | `v1.34.0` |
-| `LOG_LEVEL` | Logging level (debug, info, warning, error) | `info` |
-
-### Provider-Specific Variables
-
-**OpenAI:**
-- `OPENAI_API_KEY` (required)
-- `OPENAI_BASE_URL` (optional)
-- `OPENAI_ORGANIZATION` (optional)
-
-**Azure OpenAI:**
-- `AZURE_OPENAI_ENDPOINT` (required)
-- `AZURE_OPENAI_DEPLOYMENT_NAME` (required)
-- `AZURE_OPENAI_API_KEY` (optional, uses Azure CLI auth if not provided)
-- `AZURE_OPENAI_API_VERSION` (optional, default: `2025-03-01-preview`)
-
-## Architecture
-
-Butler Agent is built on proven patterns from the OSDU community:
-
-- **Agent Framework**: Microsoft Agent Framework for structured LLM interactions
-- **Multi-Provider Support**: Flexible LLM provider selection via factory pattern
-- **Tool-Based Architecture**: Extensible tool system for cluster operations
-- **Middleware Pipeline**: Agent and function-level middleware for logging and observability
-- **Memory System**: Context providers for learning user preferences and patterns
-- **Conversation Persistence**: Thread serialization for saving/loading conversations
-- **Rich Console**: Beautiful formatting with Rich library
-
-### Components
-
-```
-butler-agent/
-├── src/butler/
-│   ├── agent.py           # Core agent with LLM orchestration
-│   ├── cli.py             # CLI interface and interactive mode
-│   ├── config.py          # Multi-provider configuration
-│   ├── clients.py         # LLM client factory
-│   ├── middleware.py      # Agent and function middleware pipeline
-│   ├── memory.py          # Context providers for learning preferences
-│   ├── persistence.py     # Conversation save/load management
-│   ├── activity.py        # Activity tracking
-│   ├── observability.py   # Telemetry integration
-│   ├── cluster/           # Cluster management
-│   │   ├── tools.py       # Agent tools for cluster ops
-│   │   ├── kind_manager.py # KinD CLI wrapper
-│   │   ├── status.py      # Status and health checks
-│   │   └── config.py      # Cluster templates
-│   ├── display/           # Output formatting
-│   └── utils/             # Utilities
-```
+See [.env.example](.env.example) for all options.
 
 ## Development
 
-### CI/CD Pipeline
-
-Butler Agent uses GitHub Actions for automated quality checks, security scanning, and releases:
-
-**CI Workflow**: Runs on every push and pull request
-- Black code formatting validation
-- Ruff linting checks
-- MyPy type checking
-- Pytest with coverage (minimum 60% required)
-- Quality check summary with actionable guidance
-
-**Security Workflow**: Runs on PRs, weekly schedule, and main branch pushes
-- CodeQL security analysis
-- Dependency vulnerability scanning
-- SBOM (Software Bill of Materials) generation
-
-**Release Workflow**: Automated semantic versioning and releases
-- Uses [release-please](https://github.com/googleapis/release-please) for automated changelog generation
-- Follows [Conventional Commits](https://www.conventionalcommits.org/) specification
-- Automatically builds and uploads Python distribution packages
-
-### Running Quality Checks Locally
-
-Before pushing code, run the same checks that CI will perform:
+### Local Development
 
 ```bash
-# Check code formatting
-uv run black --check src/butler/ tests/ --diff --color
+# Install with dev dependencies
+uv sync
 
-# Run linting
-uv run ruff check src/butler/ tests/
-
-# Type checking
-uv run mypy src/butler --pretty --color-output
-
-# Run tests with coverage
-uv run pytest --cov=src/butler --cov-report=xml --cov-report=term-missing --cov-fail-under=60 -v
+# Run quality checks
+uv run black src/agent/ tests/
+uv run ruff check src/agent/ tests/
+uv run mypy src/agent/
+uv run pytest --cov=src/agent --cov-fail-under=60
 ```
 
-To automatically fix formatting issues:
-```bash
-uv run black src/butler/ tests/
-```
+### CI/CD
 
-### Running Tests
+- **CI**: Black, Ruff, MyPy, Pytest (60% coverage minimum)
+- **Security**: CodeQL, dependency scanning, SBOM generation
+- **Releases**: Automated via [release-please](https://github.com/googleapis/release-please) with [Conventional Commits](https://www.conventionalcommits.org/)
 
-```bash
-# Unit tests
-uv run pytest tests/unit/ --cov=butler
-
-# Integration tests (requires Docker)
-uv run pytest tests/integration/ -v
-
-# All tests with coverage report
-uv run pytest --cov=butler --cov-report=html
-```
-
-### Release Process
-
-Butler Agent uses automated releases via Conventional Commits:
-
-1. Use conventional commit messages in your PRs:
-   - `feat:` - New features (bumps minor version: 0.1.0 → 0.2.0)
-   - `fix:` - Bug fixes (bumps patch version: 0.1.0 → 0.1.1)
-   - `feat!:` or `BREAKING CHANGE:` - Breaking changes (bumps major version when >=1.0.0)
-   - `docs:`, `test:`, `chore:`, `refactor:`, `ci:` - Included in changelog, no version bump
-
-2. When commits are merged to `main`, release-please automatically:
-   - Creates/updates a release PR with changelog and version bump
-   - When the release PR is merged, creates a GitHub release
-   - Builds and uploads Python wheel and source distributions
-
-For more details on CI/CD workflows, see [docs/ci-cd.md](docs/ci-cd.md).
-
-## Comparison with Related Projects
-
-### vs. HostK8s
-- **HostK8s**: Make-based infrastructure management with GitOps
-- **Butler**: Conversational interface to HostK8s capabilities (Phase 1: clusters only)
-- **Relationship**: Butler will provide natural language interface to HostK8s in future phases
-
-### vs. OSDU Agent
-- **OSDU Agent**: Conversational interface for OSDU code and development
-- **Butler**: Conversational interface for Kubernetes infrastructure
-- **Relationship**: Shared architecture patterns, complementary tools
+See [docs/ci-cd.md](docs/ci-cd.md) for details.
 
 ## Roadmap
 
-### Phase 1: Foundation (Current)
-- ✅ Core agent infrastructure
-- ✅ KinD cluster management
-- ✅ Multi-provider LLM support
-- ✅ Basic conversational interface
-- ✅ Observability integration
+- **Phase 1** (Current): KinD cluster management, conversation persistence, memory system
+- **Phase 2**: Component deployment (Istio, Elasticsearch, Postgres)
+- **Phase 3**: GitOps integration (Flux CD)
+- **Phase 4**: Software stack templates
+- **Phase 5**: Enhanced K8s operations (resource management, log analysis)
 
-### Phase 2: Component Deployment (Future)
-- Component catalog (Istio, Elasticsearch, Postgres, etc.)
-- Deployment tools
-- Dependency resolution
-- Health checking
-
-### Phase 3: GitOps Integration (Future)
-- Flux CD management
-- Git repository integration
-- Kustomization generation
-
-### Phase 4: Software Stacks (Future)
-- Pre-configured stack templates
-- Stack deployment and validation
-- Custom stack creation
-
-### Phase 5: Kubernetes Operations (Future)
-- Resource operations
-- Log analysis
-- Enhanced troubleshooting
+See [docs/ARCHITECTURE_PLAN.md](docs/ARCHITECTURE_PLAN.md) for architecture details.
 
 ## Contributing
 
-Contributions are welcome! Please see the OSDU community guidelines.
+Contributions welcome! Follow the OSDU community guidelines.
 
 ## License
 
-Apache 2.0 - See LICENSE file for details.
+Apache License 2.0 - See LICENSE file for details
 
-## Support
+## Acknowledgments
 
-- Issues: https://github.com/your-org/butler-agent/issues
-- Documentation: See `docs/` directory
-- OSDU Community: https://osduforum.org
-
----
-
-Built with ❤️ by the OSDU Community
+- Built with [Microsoft Agent Framework](https://github.com/microsoft/agent-framework)
+- Inspired by [OSDU Agent](https://github.com/danielscholl/ai-examples/tree/main/osdu-agent)
+- Part of the OSDU Community ecosystem
