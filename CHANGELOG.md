@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.2...butler-agent-v0.1.3) (2025-11-02)
+
+
+### Features
+
+* Add cluster lifecycle management and custom KinD configurations ([#12](https://github.com/danielscholl/butler-agent/issues/12)) ([8c917cb](https://github.com/danielscholl/butler-agent/commit/8c917cbc86baf5033432d2d81852565949ba5a83))
+
 ## [0.1.2](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.1...butler-agent-v0.1.2) (2025-11-02)
 
 
