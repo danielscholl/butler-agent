@@ -109,7 +109,7 @@ butler --help
 ### Interactive Commands
 
 ```
-/new                 # Start fresh conversation
+/clear               # Clear screen and reset conversation context
 /save <name>         # Save conversation
 /load <name>         # Load saved conversation
 /list                # List saved conversations
