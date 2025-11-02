@@ -84,8 +84,8 @@ class Agent:
             tools.extend(mcp_tools)
             logger.info(f"Registered {len(mcp_tools)} MCP tools")
 
-        # Create middleware (both agent and function levels)
-        middleware_config = create_middleware()
+        # Create function-level middleware for tool execution
+        function_middleware = create_middleware()["function"]
 
         # Create context providers (memory) if enabled
         context_providers = []
@@ -111,7 +111,7 @@ class Agent:
                 "name": "Butler",
                 "instructions": instructions,
                 "tools": tools,
-                "middleware": middleware_config["function"],  # Function middleware
+                "middleware": function_middleware,
             }
 
             # Add context providers if available
@@ -122,12 +122,9 @@ class Agent:
 
             logger.info(
                 f"Butler Agent initialized with {len(tools)} tools, "
-                f"{len(middleware_config['function'])} function middleware, "
+                f"{len(function_middleware)} middleware, "
                 f"and {len(context_providers)} context providers"
             )
-
-            # Store agent middleware for potential use at run time
-            self._agent_middleware = middleware_config["agent"]
 
         except Exception as e:
             logger.error(f"Failed to create agent: {e}")

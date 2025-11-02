@@ -6,11 +6,49 @@ enabling users to maintain conversation history across sessions.
 
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_conversation_name(name: str) -> str:
+    """Sanitize conversation name to prevent path traversal attacks.
+
+    Args:
+        name: User-provided conversation name
+
+    Returns:
+        Sanitized name safe for filesystem use
+
+    Raises:
+        ValueError: If name is invalid or unsafe
+    """
+    # Trim whitespace
+    name = name.strip()
+
+    # Check length (1-64 characters)
+    if not name or len(name) > 64:
+        raise ValueError("Conversation name must be between 1 and 64 characters")
+
+    # Check for valid characters: alphanumeric, underscore, dash, dot
+    if not re.match(r"^[A-Za-z0-9._-]+$", name):
+        raise ValueError(
+            "Conversation name can only contain letters, numbers, underscores, " "dashes, and dots"
+        )
+
+    # Prevent path traversal attempts
+    if ".." in name or name.startswith(".") or "/" in name or "\\" in name:
+        raise ValueError("Invalid conversation name: path traversal not allowed")
+
+    # Prevent reserved names
+    reserved_names = {"index", "metadata", "con", "prn", "aux", "nul"}
+    if name.lower() in reserved_names:
+        raise ValueError(f"Reserved name '{name}' cannot be used")
+
+    return name
 
 
 class ThreadPersistence:
@@ -75,9 +113,12 @@ class ThreadPersistence:
             Path to saved conversation file
 
         Raises:
+            ValueError: If name is invalid or unsafe
             Exception: If serialization or save fails
         """
-        logger.info(f"Saving conversation '{name}'...")
+        # Sanitize name for security
+        safe_name = _sanitize_conversation_name(name)
+        logger.info(f"Saving conversation '{safe_name}'...")
 
         try:
             # Serialize thread
@@ -85,19 +126,19 @@ class ThreadPersistence:
 
             # Add metadata
             conversation_data = {
-                "name": name,
+                "name": safe_name,
                 "description": description,
                 "created_at": datetime.now().isoformat(),
                 "thread": serialized,
             }
 
             # Save to file
-            file_path = self.storage_dir / f"{name}.json"
+            file_path = self.storage_dir / f"{safe_name}.json"
             with open(file_path, "w") as f:
                 json.dump(conversation_data, f, indent=2)
 
             # Update metadata index
-            self.metadata["conversations"][name] = {
+            self.metadata["conversations"][safe_name] = {
                 "description": description,
                 "created_at": conversation_data["created_at"],
                 "file": str(file_path),
@@ -122,15 +163,18 @@ class ThreadPersistence:
             Deserialized AgentThread
 
         Raises:
+            ValueError: If name is invalid or unsafe
             FileNotFoundError: If conversation doesn't exist
             Exception: If deserialization fails
         """
-        logger.info(f"Loading conversation '{name}'...")
+        # Sanitize name for security
+        safe_name = _sanitize_conversation_name(name)
+        logger.info(f"Loading conversation '{safe_name}'...")
 
-        file_path = self.storage_dir / f"{name}.json"
+        file_path = self.storage_dir / f"{safe_name}.json"
 
         if not file_path.exists():
-            raise FileNotFoundError(f"Conversation '{name}' not found")
+            raise FileNotFoundError(f"Conversation '{safe_name}' not found")
 
         try:
             # Load from file
@@ -140,7 +184,7 @@ class ThreadPersistence:
             # Deserialize thread using agent
             thread = await agent.agent.deserialize_thread(conversation_data["thread"])
 
-            logger.info(f"Conversation '{name}' loaded successfully")
+            logger.info(f"Conversation '{safe_name}' loaded successfully")
             return thread
 
         except Exception as e:
@@ -175,18 +219,23 @@ class ThreadPersistence:
 
         Returns:
             True if deleted, False if not found
+
+        Raises:
+            ValueError: If name is invalid or unsafe
         """
-        file_path = self.storage_dir / f"{name}.json"
+        # Sanitize name for security
+        safe_name = _sanitize_conversation_name(name)
+        file_path = self.storage_dir / f"{safe_name}.json"
 
         if file_path.exists():
             try:
                 file_path.unlink()
 
-                if name in self.metadata["conversations"]:
-                    del self.metadata["conversations"][name]
+                if safe_name in self.metadata["conversations"]:
+                    del self.metadata["conversations"][safe_name]
                     self._save_metadata()
 
-                logger.info(f"Conversation '{name}' deleted")
+                logger.info(f"Conversation '{safe_name}' deleted")
                 return True
             except Exception as e:
                 logger.error(f"Failed to delete conversation: {e}")
@@ -202,8 +251,13 @@ class ThreadPersistence:
 
         Returns:
             True if conversation exists
+
+        Raises:
+            ValueError: If name is invalid or unsafe
         """
-        file_path = self.storage_dir / f"{name}.json"
+        # Sanitize name for security
+        safe_name = _sanitize_conversation_name(name)
+        file_path = self.storage_dir / f"{safe_name}.json"
         return file_path.exists()
 
     def get_conversation_info(self, name: str) -> dict[str, Any] | None:
@@ -214,5 +268,10 @@ class ThreadPersistence:
 
         Returns:
             Conversation metadata dict or None if not found
+
+        Raises:
+            ValueError: If name is invalid or unsafe
         """
-        return self.metadata["conversations"].get(name)  # type: ignore[no-any-return]
+        # Sanitize name for security
+        safe_name = _sanitize_conversation_name(name)
+        return self.metadata["conversations"].get(safe_name)  # type: ignore[no-any-return]

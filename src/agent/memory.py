@@ -10,7 +10,7 @@ from collections.abc import MutableSequence, Sequence
 from typing import Any
 
 from agent_framework import ChatMessage, Context, ContextProvider
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class ClusterPreferences(BaseModel):
 
     default_config: str | None = None  # "minimal", "default", "custom"
     default_k8s_version: str | None = None
-    recent_cluster_names: list[str] = []
+    recent_cluster_names: list[str] = Field(default_factory=list)
     preferred_naming_pattern: str | None = None
 
 
