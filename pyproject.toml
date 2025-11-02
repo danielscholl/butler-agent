@@ -45,14 +45,14 @@ dev = [
 ]
 
 [project.scripts]
-butler = "butler.cli:main"
+butler = "agent.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/butler"]
+packages = ["src/agent"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -104,20 +104,20 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["butler"]
+known-first-party = ["agent"]
 
 [tool.coverage.run]
-source = ["src/butler"]
+source = ["src/agent"]
 omit = [
     "tests/*",
-    "src/butler/display/*",
-    "src/butler/observability.py",
-    "src/butler/cli.py",
-    "src/butler/cluster/kind_manager.py",
-    "src/butler/cluster/status.py",
-    "src/butler/cluster/tools.py",
-    "src/butler/utils/paths.py",
-    "src/butler/utils/validation.py",
+    "src/agent/display/*",
+    "src/agent/observability.py",
+    "src/agent/cli.py",
+    "src/agent/cluster/kind_manager.py",
+    "src/agent/cluster/status.py",
+    "src/agent/cluster/tools.py",
+    "src/agent/utils/paths.py",
+    "src/agent/utils/validation.py",
 ]
 
 [tool.coverage.report]

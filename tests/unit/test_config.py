@@ -6,16 +6,16 @@ from unittest.mock import patch
 
 import pytest
 
-from butler.config import ButlerConfig
+from agent.config import AgentConfig
 
 
-class TestButlerConfig:
-    """Test ButlerConfig class."""
+class TestAgentConfig:
+    """Test AgentConfig class."""
 
     def test_default_configuration(self):
         """Test default configuration values."""
         with patch.dict(os.environ, {}, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
 
             assert config.llm_provider == "azure"
             assert config.data_dir == "./data"
@@ -33,7 +33,7 @@ class TestButlerConfig:
         }
 
         with patch.dict(os.environ, env, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
 
             assert config.llm_provider == "azure"
             assert config.azure_openai_endpoint == "https://test.openai.azure.com/"
@@ -49,7 +49,7 @@ class TestButlerConfig:
         }
 
         with patch.dict(os.environ, env, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
 
             assert config.llm_provider == "openai"
             assert config.openai_api_key == "sk-test123"
@@ -64,7 +64,7 @@ class TestButlerConfig:
         }
 
         with patch.dict(os.environ, env, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
             config.validate()  # Should not raise
 
     def test_validation_failure_azure_missing_endpoint(self):
@@ -75,7 +75,7 @@ class TestButlerConfig:
         }
 
         with patch.dict(os.environ, env, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
 
             with pytest.raises(ValueError, match="Azure OpenAI endpoint is required"):
                 config.validate()
@@ -87,7 +87,7 @@ class TestButlerConfig:
         }
 
         with patch.dict(os.environ, env, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
 
             with pytest.raises(ValueError, match="OpenAI API key is required"):
                 config.validate()
@@ -95,7 +95,7 @@ class TestButlerConfig:
     def test_get_cluster_data_dir(self):
         """Test getting cluster data directory path."""
         with patch.dict(os.environ, {"BUTLER_DATA_DIR": "/tmp/test"}, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
             path = config.get_cluster_data_dir("test-cluster")
 
             assert path == Path("/tmp/test/test-cluster")
@@ -103,7 +103,7 @@ class TestButlerConfig:
     def test_get_kubeconfig_path(self):
         """Test getting kubeconfig file path."""
         with patch.dict(os.environ, {"BUTLER_DATA_DIR": "/tmp/test"}, clear=True):
-            config = ButlerConfig()
+            config = AgentConfig()
             path = config.get_kubeconfig_path("test-cluster")
 
             assert path == Path("/tmp/test/test-cluster/kubeconfig")
@@ -126,7 +126,7 @@ class TestButlerConfig:
                 env["AZURE_OPENAI_DEPLOYMENT_NAME"] = "gpt-4"
 
             with patch.dict(os.environ, env, clear=True):
-                config = ButlerConfig()
+                config = AgentConfig()
                 assert config.get_provider_display_name() == expected
 
     def test_model_name_defaults(self):
@@ -140,5 +140,5 @@ class TestButlerConfig:
             env = {"LLM_PROVIDER": provider}
 
             with patch.dict(os.environ, env, clear=True):
-                config = ButlerConfig()
+                config = AgentConfig()
                 assert config.model_name == expected_model

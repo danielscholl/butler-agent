@@ -115,7 +115,7 @@ class ThreadPersistence:
         """Load a conversation thread.
 
         Args:
-            agent: ButlerAgent instance for deserialization
+            agent: Agent instance for deserialization
             name: Name of conversation to load
 
         Returns:

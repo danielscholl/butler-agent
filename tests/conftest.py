@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from butler.config import ButlerConfig
+from agent.config import AgentConfig
 from tests.mocks import MockChatClient
 
 
@@ -24,17 +24,17 @@ def mock_chat_client() -> MockChatClient:
 
 
 @pytest.fixture
-def mock_config() -> ButlerConfig:
+def mock_config() -> AgentConfig:
     """Create a mock configuration for testing.
 
     Returns:
-        ButlerConfig with test values
+        AgentConfig with test values
     """
     # Set test environment variables
     os.environ["OPENAI_API_KEY"] = "test-openai-key"
     os.environ["LLM_PROVIDER"] = "openai"
 
-    config = ButlerConfig(
+    config = AgentConfig(
         llm_provider="openai",
         openai_api_key="test-openai-key",
         model_name="gpt-5-mini",
@@ -44,11 +44,11 @@ def mock_config() -> ButlerConfig:
 
 
 @pytest.fixture
-def mock_azure_config() -> ButlerConfig:
+def mock_azure_config() -> AgentConfig:
     """Create a mock Azure configuration for testing.
 
     Returns:
-        ButlerConfig with Azure test values
+        AgentConfig with Azure test values
     """
     # Set test environment variables
     os.environ["LLM_PROVIDER"] = "azure"
@@ -56,7 +56,7 @@ def mock_azure_config() -> ButlerConfig:
     os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"] = "test-deployment"
     os.environ["AZURE_OPENAI_API_KEY"] = "test-azure-key"
 
-    config = ButlerConfig(
+    config = AgentConfig(
         llm_provider="azure",
         azure_openai_endpoint="https://test.openai.azure.com/",
         azure_openai_deployment="test-deployment",
@@ -67,7 +67,7 @@ def mock_azure_config() -> ButlerConfig:
 
 
 @pytest.fixture
-def mock_butler_agent(mock_chat_client: MockChatClient, mock_config: ButlerConfig) -> Any:
+def mock_butler_agent(mock_chat_client: MockChatClient, mock_config: AgentConfig) -> Any:
     """Create a mock Butler agent for testing.
 
     Args:
@@ -75,10 +75,10 @@ def mock_butler_agent(mock_chat_client: MockChatClient, mock_config: ButlerConfi
         mock_config: Mock configuration
 
     Returns:
-        ButlerAgent instance with mock client
+        Agent instance with mock client
     """
-    from butler.agent import ButlerAgent
+    from agent.agent import Agent
 
     # Use dependency injection to provide mock client
-    agent = ButlerAgent(config=mock_config, chat_client=mock_chat_client)
+    agent = Agent(config=mock_config, chat_client=mock_chat_client)
     return agent

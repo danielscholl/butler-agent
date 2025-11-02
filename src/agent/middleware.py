@@ -15,7 +15,7 @@ from agent_framework import (
     FunctionMiddleware,
 )
 
-from butler.activity import activity_tracker
+from agent.activity import activity_tracker
 
 logger = logging.getLogger(__name__)
 

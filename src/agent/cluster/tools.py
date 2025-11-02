@@ -6,11 +6,11 @@ These functions are exposed as tools that the AI agent can use to manage KinD cl
 import logging
 from typing import Any
 
-from butler.cluster.config import get_cluster_config
-from butler.cluster.kind_manager import KindManager
-from butler.cluster.status import ClusterStatus
-from butler.config import ButlerConfig
-from butler.utils.errors import (
+from agent.cluster.config import get_cluster_config
+from agent.cluster.kind_manager import KindManager
+from agent.cluster.status import ClusterStatus
+from agent.config import AgentConfig
+from agent.utils.errors import (
     ClusterAlreadyExistsError,
     ClusterNotFoundError,
     KindCommandError,
@@ -21,10 +21,10 @@ logger = logging.getLogger(__name__)
 # Global instances
 _kind_manager: KindManager | None = None
 _cluster_status: ClusterStatus | None = None
-_config: ButlerConfig | None = None
+_config: AgentConfig | None = None
 
 
-def initialize_tools(config: ButlerConfig) -> None:
+def initialize_tools(config: AgentConfig) -> None:
     """Initialize tools with configuration.
 
     Args:

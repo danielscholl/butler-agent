@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from agent_framework import AgentRunContext, FunctionInvocationContext
 
-from butler.middleware import (
+from agent.middleware import (
     activity_tracking_middleware,
     agent_observability_middleware,
     agent_run_logging_middleware,

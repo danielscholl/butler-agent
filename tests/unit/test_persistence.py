@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from butler.persistence import ThreadPersistence
+from agent.persistence import ThreadPersistence
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def mock_thread():
 
 @pytest.fixture
 def mock_agent():
-    """Create a mock ButlerAgent."""
+    """Create a mock Agent."""
     agent = MagicMock()
     agent.agent = MagicMock()
 

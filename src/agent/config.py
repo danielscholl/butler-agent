@@ -1,4 +1,4 @@
-"""Configuration management for Butler Agent.
+"""Configuration management for the agent.
 
 This module handles configuration loading from environment variables and .env files,
 including multi-provider LLM configuration (OpenAI and Azure OpenAI).
@@ -13,11 +13,15 @@ from dotenv import load_dotenv
 
 
 @dataclass
-class ButlerConfig:
-    """Butler Agent configuration.
+class AgentConfig:
+    """Agent configuration.
 
     Loads configuration from environment variables with support for multiple LLM providers.
     """
+
+    # Application Identity
+    app_name: str = "Butler"
+    app_description: str = "AI-powered DevOps assistant for Kubernetes infrastructure"
 
     # LLM Provider Configuration
     llm_provider: Literal["openai", "azure"] = "azure"
@@ -34,7 +38,7 @@ class ButlerConfig:
     azure_openai_deployment: str | None = None
     azure_openai_api_version: str = "2025-03-01-preview"
 
-    # Butler Configuration
+    # Agent Configuration
     data_dir: str = "./data"
     cluster_prefix: str = "butler-"
     default_k8s_version: str = "v1.34.0"
@@ -47,6 +51,10 @@ class ButlerConfig:
         """Load configuration from environment variables after initialization."""
         # Load .env file if present
         load_dotenv()
+
+        # Application Identity (can be overridden via env)
+        self.app_name = os.getenv("APP_NAME", self.app_name)
+        self.app_description = os.getenv("APP_DESCRIPTION", self.app_description)
 
         # LLM Provider Configuration
         self.llm_provider = os.getenv("LLM_PROVIDER", self.llm_provider).lower()  # type: ignore
@@ -67,7 +75,7 @@ class ButlerConfig:
             "AZURE_OPENAI_API_VERSION", self.azure_openai_api_version
         )
 
-        # Butler Configuration
+        # Agent Configuration (keeping BUTLER_ prefix for backward compatibility)
         self.data_dir = os.getenv("BUTLER_DATA_DIR", self.data_dir)
         self.cluster_prefix = os.getenv("BUTLER_CLUSTER_PREFIX", self.cluster_prefix)
         self.default_k8s_version = os.getenv("BUTLER_DEFAULT_K8S_VERSION", self.default_k8s_version)

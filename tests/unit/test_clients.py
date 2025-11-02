@@ -5,9 +5,9 @@ from unittest.mock import patch
 
 import pytest
 
-from butler.clients import create_chat_client, get_model_name
-from butler.config import ButlerConfig
-from butler.utils.errors import ConfigurationError
+from agent.clients import create_chat_client, get_model_name
+from agent.config import AgentConfig
+from agent.utils.errors import ConfigurationError
 
 
 class TestCreateChatClient:
@@ -20,7 +20,7 @@ class TestCreateChatClient:
             {"LLM_PROVIDER": "openai", "OPENAI_API_KEY": "test-key"},
             clear=True,
         ):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="openai",
                 openai_api_key="test-key",
                 model_name="gpt-5-mini",
@@ -44,7 +44,7 @@ class TestCreateChatClient:
             {"LLM_PROVIDER": "openai", "OPENAI_API_KEY": "test-key"},
             clear=True,
         ):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="openai",
                 openai_api_key="test-key",
                 model_name="gpt-5-codex",
@@ -73,7 +73,7 @@ class TestCreateChatClient:
             },
             clear=True,
         ):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="openai",
                 openai_api_key="test-key",
                 openai_base_url="https://custom.openai.com",
@@ -94,7 +94,7 @@ class TestCreateChatClient:
     def test_create_openai_client_missing_api_key(self):
         """Test creating OpenAI client without API key raises error."""
         with patch.dict(os.environ, {"LLM_PROVIDER": "openai"}, clear=True):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="openai",
                 openai_api_key=None,
             )
@@ -114,7 +114,7 @@ class TestCreateChatClient:
             },
             clear=True,
         ):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="azure",
                 azure_openai_endpoint="https://test.openai.azure.com/",
                 azure_openai_deployment="gpt-4",
@@ -143,7 +143,7 @@ class TestCreateChatClient:
             },
             clear=True,
         ):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="azure",
                 azure_openai_endpoint="https://test.openai.azure.com/",
                 azure_openai_deployment="gpt-4",
@@ -165,7 +165,7 @@ class TestCreateChatClient:
     def test_create_azure_client_missing_endpoint(self):
         """Test creating Azure client without endpoint raises error."""
         with patch.dict(os.environ, {}, clear=True):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="azure",
                 azure_openai_endpoint=None,
                 azure_openai_deployment="gpt-4",
@@ -177,7 +177,7 @@ class TestCreateChatClient:
     def test_create_azure_client_missing_deployment(self):
         """Test creating Azure client without deployment name raises error."""
         with patch.dict(os.environ, {}, clear=True):
-            config = ButlerConfig(
+            config = AgentConfig(
                 llm_provider="azure",
                 azure_openai_endpoint="https://test.openai.azure.com/",
                 azure_openai_deployment=None,
@@ -190,7 +190,7 @@ class TestCreateChatClient:
 
     def test_unsupported_provider_raises_error(self):
         """Test that unsupported provider raises ConfigurationError."""
-        config = ButlerConfig(
+        config = AgentConfig(
             llm_provider="openai",  # Valid provider for type hint
         )
         # Manually set to invalid value to test error handling
@@ -205,7 +205,7 @@ class TestGetModelName:
 
     def test_get_model_name_from_config(self):
         """Test getting model name from config."""
-        config = ButlerConfig(
+        config = AgentConfig(
             llm_provider="openai",
             model_name="custom-model",
         )
@@ -215,13 +215,13 @@ class TestGetModelName:
     def test_get_default_model_name_openai(self):
         """Test getting default model name for OpenAI."""
         with patch.dict(os.environ, {"LLM_PROVIDER": "openai"}, clear=True):
-            config = ButlerConfig(llm_provider="openai")
+            config = AgentConfig(llm_provider="openai")
 
             assert get_model_name(config) == "gpt-5-codex"
 
     def test_get_default_model_name_azure(self):
         """Test getting default model name for Azure."""
         with patch.dict(os.environ, {"LLM_PROVIDER": "azure"}, clear=True):
-            config = ButlerConfig(llm_provider="azure")
+            config = AgentConfig(llm_provider="azure")
 
             assert get_model_name(config) == "gpt-5-codex"

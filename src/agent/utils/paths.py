@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
-from butler.config import ButlerConfig
+from agent.config import AgentConfig
 
 
-def ensure_data_dir(config: ButlerConfig) -> Path:
+def ensure_data_dir(config: AgentConfig) -> Path:
     """Ensure data directory exists.
 
     Args:
@@ -19,7 +19,7 @@ def ensure_data_dir(config: ButlerConfig) -> Path:
     return data_path
 
 
-def get_cluster_data_path(config: ButlerConfig, cluster_name: str) -> Path:
+def get_cluster_data_path(config: AgentConfig, cluster_name: str) -> Path:
     """Get path for cluster-specific data.
 
     Args:

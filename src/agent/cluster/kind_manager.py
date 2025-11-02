@@ -6,12 +6,12 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from butler.utils.errors import (
+from agent.utils.errors import (
     ClusterAlreadyExistsError,
     ClusterNotFoundError,
     KindCommandError,
 )
-from butler.utils.validation import validate_cluster_name, validate_k8s_version
+from agent.utils.validation import validate_cluster_name, validate_k8s_version
 
 logger = logging.getLogger(__name__)
 

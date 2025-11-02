@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from butler.cli import build_parser, run_single_query
+from agent.cli import build_parser, run_single_query
 
 
 class TestArgumentParser:
@@ -64,9 +64,9 @@ class TestSingleQueryMode:
     async def test_run_single_query_success(self):
         """Test successful single query execution."""
         with (
-            patch("butler.cli.ButlerConfig") as mock_config_class,
-            patch("butler.cli.ButlerAgent") as mock_agent_class,
-            patch("butler.cli.setup_logging"),
+            patch("agent.cli.AgentConfig") as mock_config_class,
+            patch("agent.cli.Agent") as mock_agent_class,
+            patch("agent.cli.setup_logging"),
         ):
             # Setup mocks
             mock_config = MagicMock()
@@ -90,10 +90,10 @@ class TestSingleQueryMode:
     async def test_run_single_query_quiet_mode(self):
         """Test single query in quiet mode."""
         with (
-            patch("butler.cli.ButlerConfig") as mock_config_class,
-            patch("butler.cli.ButlerAgent") as mock_agent_class,
-            patch("butler.cli.setup_logging"),
-            patch("butler.cli.console"),
+            patch("agent.cli.AgentConfig") as mock_config_class,
+            patch("agent.cli.Agent") as mock_agent_class,
+            patch("agent.cli.setup_logging"),
+            patch("agent.cli.console"),
         ):
             # Setup mocks
             mock_config = MagicMock()
@@ -116,11 +116,11 @@ class TestSingleQueryMode:
     @pytest.mark.asyncio
     async def test_run_single_query_config_error(self):
         """Test single query with configuration error."""
-        from butler.utils.errors import ConfigurationError
+        from agent.utils.errors import ConfigurationError
 
         with (
-            patch("butler.cli.ButlerConfig") as mock_config_class,
-            patch("butler.cli.sys.exit") as mock_exit,
+            patch("agent.cli.AgentConfig") as mock_config_class,
+            patch("agent.cli.sys.exit") as mock_exit,
         ):
             mock_config_class.return_value.validate.side_effect = ConfigurationError("Test error")
 
@@ -133,10 +133,10 @@ class TestSingleQueryMode:
     async def test_run_single_query_agent_creation_error(self):
         """Test single query when agent creation fails."""
         with (
-            patch("butler.cli.ButlerConfig") as mock_config_class,
-            patch("butler.cli.ButlerAgent") as mock_agent_class,
-            patch("butler.cli.setup_logging"),
-            patch("butler.cli.sys.exit") as mock_exit,
+            patch("agent.cli.AgentConfig") as mock_config_class,
+            patch("agent.cli.Agent") as mock_agent_class,
+            patch("agent.cli.setup_logging"),
+            patch("agent.cli.sys.exit") as mock_exit,
         ):
             # Setup mocks
             mock_config = MagicMock()
@@ -163,17 +163,17 @@ class TestInteractiveMode:
         # This is a complex integration test that would require
         # mocking the entire interactive loop. For now, we test
         # that the necessary components are imported correctly.
-        from butler.cli import run_chat_mode
+        from agent.cli import run_chat_mode
 
         assert run_chat_mode is not None
         assert callable(run_chat_mode)
 
     def test_render_prompt_area(self):
         """Test prompt rendering."""
-        from butler.cli import _render_prompt_area
-        from butler.config import ButlerConfig
+        from agent.cli import _render_prompt_area
+        from agent.config import AgentConfig
 
-        config = ButlerConfig(llm_provider="openai")
+        config = AgentConfig(llm_provider="openai")
         prompt = _render_prompt_area(config)
 
         assert "Butler" in prompt
@@ -181,9 +181,9 @@ class TestInteractiveMode:
 
     def test_show_help(self):
         """Test help display."""
-        from butler.cli import _show_help
+        from agent.cli import _show_help
 
-        with patch("butler.cli.console") as mock_console:
+        with patch("agent.cli.console") as mock_console:
             _show_help()
 
             # Verify console.print was called with help text
@@ -195,14 +195,14 @@ class TestMainEntry:
 
     def test_main_function_exists(self):
         """Test that main function exists and is callable."""
-        from butler.cli import main
+        from agent.cli import main
 
         assert main is not None
         assert callable(main)
 
     def test_async_main_function_exists(self):
         """Test that async_main function exists and is callable."""
-        from butler.cli import async_main
+        from agent.cli import async_main
 
         assert async_main is not None
         assert callable(async_main)

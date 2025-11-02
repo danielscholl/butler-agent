@@ -6,13 +6,13 @@ Microsoft Agent Framework, supporting OpenAI and Azure OpenAI.
 
 import logging
 
-from butler.config import ButlerConfig
-from butler.utils.errors import ConfigurationError
+from agent.config import AgentConfig
+from agent.utils.errors import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
 
-def create_chat_client(config: ButlerConfig):
+def create_chat_client(config: AgentConfig):
     """Create chat client based on configuration.
 
     This factory function creates an appropriate chat client based on the
@@ -50,7 +50,7 @@ def create_chat_client(config: ButlerConfig):
         raise ConfigurationError(f"Failed to create chat client for '{provider}': {e}") from e
 
 
-def _create_openai_client(config: ButlerConfig):
+def _create_openai_client(config: AgentConfig):
     """Create OpenAI client.
 
     Args:
@@ -92,7 +92,7 @@ def _create_openai_client(config: ButlerConfig):
         )
 
 
-def _create_azure_openai_client(config: ButlerConfig):
+def _create_azure_openai_client(config: AgentConfig):
     """Create Azure OpenAI client.
 
     Args:
@@ -160,7 +160,7 @@ def _create_azure_openai_client(config: ButlerConfig):
     return client
 
 
-def get_model_name(config: ButlerConfig) -> str:
+def get_model_name(config: AgentConfig) -> str:
     """Get the model name to use for the configured provider.
 
     Args:

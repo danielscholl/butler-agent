@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from agent_framework import ChatMessage
 
-from butler.memory import (
+from agent.memory import (
     ClusterMemory,
     ClusterPreferences,
     ConversationMetrics,

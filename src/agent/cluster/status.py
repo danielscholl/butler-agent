@@ -5,7 +5,7 @@ import logging
 import subprocess
 from typing import Any
 
-from butler.utils.errors import ClusterNotFoundError, KindCommandError
+from agent.utils.errors import ClusterNotFoundError, KindCommandError
 
 logger = logging.getLogger(__name__)
 

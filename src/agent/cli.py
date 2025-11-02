@@ -16,12 +16,12 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.markdown import Markdown
 
-from butler import __version__
-from butler.agent import ButlerAgent
-from butler.config import ButlerConfig
-from butler.observability import initialize_observability
-from butler.persistence import ThreadPersistence
-from butler.utils.errors import ConfigurationError
+from agent import __version__
+from agent.agent import Agent
+from agent.config import AgentConfig
+from agent.observability import initialize_observability
+from agent.persistence import ThreadPersistence
+from agent.utils.errors import ConfigurationError
 
 console = Console()
 
@@ -89,16 +89,16 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _render_startup_banner(config: ButlerConfig) -> None:
+def _render_startup_banner(config: AgentConfig) -> None:
     """Render startup banner with configuration info.
 
     Args:
-        config: Butler configuration
+        config: Agent configuration
     """
     banner = f"""
     [bold cyan]╔══════════════════════════════════════╗[/bold cyan]
-    [bold cyan]║[/bold cyan]  [bold white]🤖 Butler Agent[/bold white]                   [bold cyan]║[/bold cyan]
-    [bold cyan]║[/bold cyan]  [white]Your AI-Powered DevOps Assistant[/white]  [bold cyan]║[/bold cyan]
+    [bold cyan]║[/bold cyan]  [bold white]🤖 {config.app_name}[/bold white]                   [bold cyan]║[/bold cyan]
+    [bold cyan]║[/bold cyan]  [white]{config.app_description}[/white]  [bold cyan]║[/bold cyan]
     [bold cyan]╚══════════════════════════════════════╝[/bold cyan]
 
     [bold]Configuration:[/bold]
@@ -162,16 +162,16 @@ def _render_startup_banner(config: ButlerConfig) -> None:
     console.print("[dim]Commands: /new /save /load /list /delete - Type 'help' for details[/dim]\n")
 
 
-def _render_prompt_area(config: ButlerConfig) -> str:
+def _render_prompt_area(config: AgentConfig) -> str:
     """Render prompt area with status info.
 
     Args:
-        config: Butler configuration
+        config: Agent configuration
 
     Returns:
         Prompt string
     """
-    return f"Butler ({config.llm_provider})> "
+    return f"{config.app_name} ({config.llm_provider})> "
 
 
 async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
@@ -183,7 +183,7 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
     """
     try:
         # Load configuration
-        config = ButlerConfig()
+        config = AgentConfig()
         config.validate()
 
         # Setup logging
@@ -200,7 +200,7 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
 
         # Create agent
         try:
-            agent = ButlerAgent(config)
+            agent = Agent(config)
         except Exception as e:
             console.print(f"[red]Failed to initialize agent: {e}[/red]")
             sys.exit(1)
@@ -377,7 +377,7 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
     """
     try:
         # Load configuration
-        config = ButlerConfig()
+        config = AgentConfig()
         config.validate()
 
         # Setup logging
@@ -390,7 +390,7 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
 
         # Create agent
         try:
-            agent = ButlerAgent(config)
+            agent = Agent(config)
         except Exception as e:
             console.print(f"[red]Failed to initialize agent: {e}[/red]")
             sys.exit(1)

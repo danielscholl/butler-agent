@@ -1,57 +1,22 @@
 """Core Butler Agent implementation.
 
-This module provides the main ButlerAgent class that orchestrates LLM interactions,
+This module provides the main Agent class that orchestrates LLM interactions,
 tool execution, and cluster management operations using Microsoft Agent Framework.
 """
 
 import logging
+from importlib import resources
 from typing import Any
 
-from butler.clients import create_chat_client
-from butler.cluster.tools import CLUSTER_TOOLS, initialize_tools
-from butler.config import ButlerConfig
-from butler.memory import ClusterMemory, ConversationMetricsMemory
-from butler.middleware import create_middleware
+from agent.clients import create_chat_client
+from agent.cluster.tools import CLUSTER_TOOLS, initialize_tools
+from agent.config import AgentConfig
+from agent.memory import ClusterMemory, ConversationMetricsMemory
+from agent.middleware import create_middleware
 
 logger = logging.getLogger(__name__)
 
-# System prompt template for Butler Agent
-SYSTEM_PROMPT = """You are Butler, an AI-powered DevOps assistant specialized in Kubernetes infrastructure management.
-
-Your primary expertise includes:
-- Managing Kubernetes in Docker (KinD) clusters
-- Cluster lifecycle operations (create, delete, status checks)
-- Troubleshooting cluster issues
-- Explaining Kubernetes concepts
-- Providing best practices for local development environments
-
-Key capabilities:
-- Create KinD clusters with different configurations (minimal, default, custom)
-- Check cluster status and health
-- List all available clusters
-- Delete clusters when no longer needed
-- Provide clear, actionable guidance
-
-Guidelines:
-- Be concise and practical in your responses
-- Always confirm destructive operations (like delete) before executing
-- Provide helpful context when errors occur
-- Suggest next steps and best practices
-- If a cluster doesn't exist, suggest creating one with create_cluster
-- When listing clusters, provide useful information about their status
-
-Remember:
-- KinD clusters run locally in Docker containers
-- Each cluster has its own kubeconfig for access
-- Cluster names should be lowercase with hyphens
-- Default clusters include control-plane and worker nodes
-- You can check node status, resource usage, and system pod health
-
-Your goal is to make Kubernetes infrastructure management simple and conversational.
-"""
-
-
-class ButlerAgent:
+class Agent:
     """Butler Agent for conversational Kubernetes infrastructure management.
 
     This agent uses the Microsoft Agent Framework's client.create_agent() pattern
@@ -60,7 +25,7 @@ class ButlerAgent:
 
     def __init__(
         self,
-        config: ButlerConfig | None = None,
+        config: AgentConfig | None = None,
         chat_client: Any | None = None,
         mcp_tools: list | None = None,
         enable_memory: bool = True,
@@ -81,7 +46,7 @@ class ButlerAgent:
             raise ValueError("Either config or chat_client must be provided")
 
         # Use provided config or create default
-        self.config = config or ButlerConfig()
+        self.config = config or AgentConfig()
 
         logger.info(
             f"Initializing Butler Agent with provider: {self.config.get_provider_display_name()}"
@@ -135,12 +100,15 @@ class ButlerAgent:
                 # Continue without memory if it fails
                 context_providers = []
 
+        # Load system prompt with configuration replacements
+        instructions = self._load_system_prompt()
+
         # Create agent using framework's create_agent() pattern
         try:
             # Prepare agent creation kwargs
             agent_kwargs = {
                 "name": "Butler",
-                "instructions": SYSTEM_PROMPT,
+                "instructions": instructions,
                 "tools": tools,
                 "middleware": middleware_config["function"],  # Function middleware
             }
@@ -163,6 +131,34 @@ class ButlerAgent:
         except Exception as e:
             logger.error(f"Failed to create agent: {e}")
             raise
+
+    def _load_system_prompt(self) -> str:
+        """Load system prompt from prompts directory.
+
+        Returns:
+            System prompt with configuration placeholders replaced
+        """
+        try:
+            # Load system prompt file
+            prompt_files = resources.files("agent.prompts")
+            system_prompt = (prompt_files / "system.md").read_text(encoding="utf-8")
+
+            # Replace configuration placeholders
+            system_prompt = system_prompt.replace("{{DATA_DIR}}", str(self.config.data_dir))
+            system_prompt = system_prompt.replace("{{CLUSTER_PREFIX}}", self.config.cluster_prefix)
+            system_prompt = system_prompt.replace("{{K8S_VERSION}}", self.config.default_k8s_version)
+
+            logger.info("System prompt loaded successfully from prompts/system.md")
+            return system_prompt
+        except Exception as e:
+            # Fallback to basic instructions if file not found
+            logger.warning(f"Failed to load system prompt from file: {e}. Using fallback.")
+            return """You are Butler, an AI-powered DevOps assistant specialized in Kubernetes infrastructure management.
+
+Your primary expertise includes managing Kubernetes in Docker (KinD) clusters, cluster lifecycle operations,
+troubleshooting cluster issues, and providing best practices for local development environments.
+
+Your goal is to make Kubernetes infrastructure management simple and conversational."""
 
     async def run(self, query: str, thread: Any | None = None) -> str:
         """Run a query through the agent.
