@@ -606,7 +606,7 @@ def run_check_command(target: str = "all") -> None:
             if result.returncode == 0:
                 # Extract version if available
                 version = _extract_version(result.stdout)
-                version_display = f" ({version})" if version else ""
+                version_display = f" [cyan]({version})[/cyan]" if version else ""
                 console.print(
                     f" [green]●[/green] {tool_name}: ✓ Available{version_display}",
                     highlight=False,
@@ -630,7 +630,8 @@ def run_check_command(target: str = "all") -> None:
         config = AgentConfig()
         console.print("\n[bold]Environment:[/bold]")
         console.print(
-            f" [cyan]●[/cyan] Provider: {config.get_provider_display_name()}", highlight=False
+            f" [cyan]●[/cyan] Provider: [cyan]{config.get_provider_display_name()}[/cyan]",
+            highlight=False,
         )
 
         data_dir = Path(config.data_dir)
@@ -638,15 +639,19 @@ def run_check_command(target: str = "all") -> None:
             writable = os.access(data_dir, os.W_OK)
             status = "exists, writable" if writable else "exists, read-only"
             console.print(
-                f" [cyan]●[/cyan] Data Dir: {config.data_dir} ({status})", highlight=False
+                f" [cyan]●[/cyan] Data Dir: [magenta]{config.data_dir}[/magenta] ({status})",
+                highlight=False,
             )
         else:
             console.print(
-                f" [yellow]●[/yellow] Data Dir: {config.data_dir} (will be created)",
+                f" [yellow]●[/yellow] Data Dir: [magenta]{config.data_dir}[/magenta] (will be created)",
                 highlight=False,
             )
 
-        console.print(f" [cyan]●[/cyan] K8s Version: {config.default_k8s_version}", highlight=False)
+        console.print(
+            f" [cyan]●[/cyan] K8s Version: [cyan]{config.default_k8s_version}[/cyan]",
+            highlight=False,
+        )
 
     except Exception as e:
         console.print(f" [red]●[/red] Configuration: ✗ Invalid ({e})", highlight=False)
