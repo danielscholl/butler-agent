@@ -10,12 +10,22 @@ def test_version_format():
     assert len(parts) >= 3, f"Version {__version__} should have at least 3 parts"
 
     # First three parts should be numeric
-    major, minor, patch = parts[0], parts[1], parts[2].split("-")[0].split("+")[0]
+    major, minor, patch_full = parts[0], parts[1], parts[2]
+    # Extract patch number (before any suffix like .devN or -suffix or +build)
+    patch = patch_full.split("-")[0].split("+")[0]
+
     assert major.isdigit(), f"Major version '{major}' should be numeric"
     assert minor.isdigit(), f"Minor version '{minor}' should be numeric"
-    assert patch.isdigit() or patch.endswith(
-        "dev0"
-    ), f"Patch version '{patch}' should be numeric or dev"
+
+    # Patch should be numeric, or contain 'dev' for development versions (e.g., 0.dev0, 1.dev2)
+    if "dev" in patch:
+        # Extract numeric part before 'dev'
+        patch_base = patch.split("dev")[0].rstrip(".")
+        assert (
+            patch_base == "" or patch_base.isdigit()
+        ), f"Patch version '{patch}' should have numeric base before dev suffix"
+    else:
+        assert patch.isdigit(), f"Patch version '{patch}' should be numeric"
 
 
 def test_version_matches_pyproject():
