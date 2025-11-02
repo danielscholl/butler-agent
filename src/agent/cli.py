@@ -9,6 +9,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
@@ -81,6 +82,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument(
+        "--check",
+        nargs="?",
+        const="all",
+        metavar="TOOL",
+        help="Run health check (optionally specify: docker, kubectl, kind)",
+    )
+
+    parser.add_argument(
+        "--config",
+        action="store_true",
+        help="Show current configuration",
+    )
+
+    parser.add_argument(
         "--version",
         action="version",
         version=f"Butler Agent {__version__}",
@@ -90,88 +105,114 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _render_startup_banner(config: AgentConfig) -> None:
-    """Render startup banner with configuration info.
+    """Render minimal startup banner.
 
     Args:
         config: Agent configuration
     """
-    banner = f"""
-    [bold cyan]╔══════════════════════════════════════╗[/bold cyan]
-    [bold cyan]║[/bold cyan]  [bold white]🤖 {config.app_name}[/bold white]                   [bold cyan]║[/bold cyan]
-    [bold cyan]║[/bold cyan]  [white]{config.app_description}[/white]  [bold cyan]║[/bold cyan]
-    [bold cyan]╚══════════════════════════════════════╝[/bold cyan]
+    banner = """
+ [bold cyan]☸  Welcome to Butler[/bold cyan]
 
-    [bold]Configuration:[/bold]
-    • LLM Provider: [cyan]{config.get_provider_display_name()}[/cyan]
-    • Data Directory: [cyan]{config.data_dir}[/cyan]
-    • Default K8s Version: [cyan]{config.default_k8s_version}[/cyan]
-
-    [bold]Status:[/bold]
-    """
-
+Butler manages Kubernetes clusters locally with natural language.
+[dim]Butler uses AI - always verify operations before executing.[/dim]
+"""
     console.print(banner)
 
-    # Check Docker
-    try:
-        import subprocess
 
-        result = subprocess.run(
-            ["docker", "info"],
-            capture_output=True,
-            timeout=5,
-        )
-        docker_status = "✓ Connected" if result.returncode == 0 else "✗ Not available"
-        docker_style = "green" if result.returncode == 0 else "red"
-    except Exception:
-        docker_status = "✗ Not available"
-        docker_style = "red"
-
-    console.print(f"    • Docker: [{docker_style}]{docker_status}[/{docker_style}]")
-
-    # Check kubectl
-    try:
-        result = subprocess.run(
-            ["kubectl", "version", "--client", "--short"],
-            capture_output=True,
-            timeout=5,
-        )
-        kubectl_status = "✓ Available" if result.returncode == 0 else "✗ Not available"
-        kubectl_style = "green" if result.returncode == 0 else "yellow"
-    except Exception:
-        kubectl_status = "✗ Not available"
-        kubectl_style = "yellow"
-
-    console.print(f"    • kubectl: [{kubectl_style}]{kubectl_status}[/{kubectl_style}]")
-
-    # Check kind
-    try:
-        result = subprocess.run(
-            ["kind", "version"],
-            capture_output=True,
-            timeout=5,
-        )
-        kind_status = "✓ Available" if result.returncode == 0 else "✗ Not available"
-        kind_style = "green" if result.returncode == 0 else "yellow"
-    except Exception:
-        kind_status = "✗ Not available"
-        kind_style = "yellow"
-
-    console.print(f"    • kind: [{kind_style}]{kind_status}[/{kind_style}]")
-
-    console.print("\n[dim]Type 'exit' or 'quit' to exit, 'help' for help[/dim]")
-    console.print("[dim]Commands: /new /save /load /list /delete - Type 'help' for details[/dim]\n")
-
-
-def _render_prompt_area(config: AgentConfig) -> str:
-    """Render prompt area with status info.
+def _render_status_bar(config: AgentConfig) -> None:
+    """Render status bar with context info.
 
     Args:
         config: Agent configuration
+    """
+    import subprocess
+
+    # Get current directory relative to home
+    try:
+        cwd = Path.cwd().relative_to(Path.home())
+        cwd_display = f"~/{cwd}"
+    except ValueError:
+        # Not relative to home, use absolute path
+        cwd_display = str(Path.cwd())
+
+    # Get git branch if in repo
+    branch_display = ""
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            capture_output=True,
+            text=True,
+            timeout=1,
+        )
+        if result.returncode == 0:
+            branch = result.stdout.strip()
+            if branch:
+                branch_display = f" [⎇ {branch}]"
+    except Exception:
+        pass
+
+    # Format status bar
+    left = f" {cwd_display}{branch_display}"
+    right = f"{config.model_name} · v{__version__}"
+
+    # Calculate padding to align right side
+    width = console.width
+    padding = max(1, width - len(left) - len(right))
+
+    console.print(f"[dim]{left}[/dim]{' ' * padding}[cyan]{right}[/cyan]", highlight=False)
+    console.print(f"[dim]{'─' * width}[/dim]")
+
+
+def _render_prompt_area() -> str:
+    """Render prompt area.
 
     Returns:
         Prompt string
     """
-    return f"{config.app_name} ({config.llm_provider})> "
+    return "> "
+
+
+def _count_tool_calls(thread: Any) -> int:
+    """Count tool calls in the thread.
+
+    Args:
+        thread: Agent thread object
+
+    Returns:
+        Number of tool calls
+    """
+    try:
+        # Try to access messages from thread
+        if not hasattr(thread, "messages"):
+            return 0
+
+        tool_count = 0
+        for message in thread.messages:
+            # Check for tool calls in message
+            if hasattr(message, "tool_calls") and message.tool_calls:
+                tool_count += len(message.tool_calls)
+            # Alternative: check for function_call
+            elif hasattr(message, "function_call") and message.function_call:
+                tool_count += 1
+
+        return tool_count
+    except Exception:
+        # If we can't count, return 0
+        return 0
+
+
+def _render_completion_status(elapsed: float, message_count: int, tool_count: int) -> None:
+    """Render completion status with metrics.
+
+    Args:
+        elapsed: Elapsed time in seconds
+        message_count: Number of messages in conversation
+        tool_count: Number of tool calls
+    """
+    console.print(
+        f"[cyan]☸[/cyan] Complete ({elapsed:.1f}s) - msg:{message_count} tool:{tool_count}\n",
+        highlight=False,
+    )
 
 
 async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
@@ -197,6 +238,7 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
         # Show startup banner
         if not quiet:
             _render_startup_banner(config)
+            _render_status_bar(config)
 
         # Create agent
         try:
@@ -220,7 +262,7 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
         while True:
             try:
                 # Get user input
-                prompt_text = _render_prompt_area(config)
+                prompt_text = _render_prompt_area()
                 user_input = await session.prompt_async(prompt_text)
 
                 if not user_input or not user_input.strip():
@@ -241,6 +283,7 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
                     console.clear()
                     if not quiet:
                         _render_startup_banner(config)
+                        _render_status_bar(config)
                     continue
 
                 # Handle /new command to start fresh conversation
@@ -327,20 +370,30 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
                     continue
 
                 # Execute query with conversation thread
-                if not quiet:
-                    console.print()
+                import time
+
+                start_time = time.time()
 
                 with console.status("[bold blue]Thinking...", spinner="dots"):
                     response = await agent.run(user_input, thread=thread)
                     message_count += 1
 
+                elapsed = time.time() - start_time
+                tool_count = _count_tool_calls(thread)
+
+                # Display completion status with metrics
+                if not quiet:
+                    _render_completion_status(elapsed, message_count, tool_count)
+
                 # Display response
                 if response:
                     console.print()
                     console.print(Markdown(response))
-                    if not quiet and message_count > 1:
-                        console.print(f"\n[dim]({message_count} messages in conversation)[/dim]")
                     console.print()
+
+                    # Add separator line
+                    if not quiet:
+                        console.print(f"[dim]{'─' * console.width}[/dim]")
 
             except KeyboardInterrupt:
                 console.print("\n[dim]Use 'exit' to quit[/dim]")
@@ -396,18 +449,33 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
             sys.exit(1)
 
         # Execute query (single-turn, no thread persistence needed)
+        import time
+
         if not quiet:
             console.print(f"\n[bold cyan]Query:[/bold cyan] {prompt}\n")
 
+        start_time = time.time()
+        thread = agent.get_new_thread()
+
         with console.status("[bold blue]Thinking...", spinner="dots"):
-            response = await agent.run(prompt)
+            response = await agent.run(prompt, thread=thread)
+
+        elapsed = time.time() - start_time
+        tool_count = _count_tool_calls(thread)
+
+        # Display completion status with metrics
+        if not quiet:
+            _render_completion_status(elapsed, 1, tool_count)
 
         # Display response
         if response:
-            if not quiet:
-                console.print("[bold cyan]Response:[/bold cyan]\n")
+            console.print()
             console.print(Markdown(response))
             console.print()
+
+            # Add separator line
+            if not quiet:
+                console.print(f"[dim]{'─' * console.width}[/dim]")
 
     except ConfigurationError as e:
         console.print(f"[red]Configuration Error: {e}[/red]")
@@ -426,7 +494,16 @@ def _show_help() -> None:
     help_text = """
 # Butler Agent Help
 
-## Commands
+## CLI Commands
+
+- `butler` - Start interactive chat mode
+- `butler --check [TOOL]` - Run health check (optionally for specific tool)
+- `butler --config` - Show current configuration
+- `butler -p "query"` - Execute single query and exit
+- `butler -v` - Enable verbose output
+- `butler -q` - Enable quiet mode (minimal output)
+
+## Interactive Commands
 
 - **exit, quit, q** - Exit Butler
 - **help, ?** - Show this help
@@ -445,6 +522,16 @@ def _show_help() -> None:
 - "Delete the test-cluster"
 - "Create a minimal cluster called quick-test"
 
+## Health Checks
+
+Check dependencies before using Butler:
+```bash
+butler --check          # Check all tools
+butler --check docker   # Check Docker only
+butler --check kubectl  # Check kubectl only
+butler --check kind     # Check kind only
+```
+
 ## Conversation Management
 
 Save your work and resume later:
@@ -458,12 +545,160 @@ Save your work and resume later:
 
 - Cluster names should be lowercase with hyphens
 - You can specify cluster configuration: minimal, default, or custom
-- Use `butler -p "your query"` for single commands
-- Use `butler -v` for verbose output with debugging info
 - Conversations are saved to ~/.butler/conversations/
+- Use `butler --config` to verify your LLM provider settings
     """
 
     console.print(Markdown(help_text))
+
+
+def _extract_version(output: str) -> str:
+    """Extract version from command output.
+
+    Args:
+        output: Command output containing version info
+
+    Returns:
+        Version string or empty string if not found
+    """
+    import re
+
+    # Try to find version patterns like v1.2.3 or 1.2.3
+    match = re.search(r"v?(\d+\.\d+\.\d+)", output)
+    return match.group(0) if match else ""
+
+
+def run_check_command(target: str = "all") -> None:
+    """Run health check command.
+
+    Args:
+        target: Specific tool to check (docker, kubectl, kind, all)
+    """
+    import os
+    import subprocess
+
+    console.print("\n [bold cyan]☸  Butler Health Check[/bold cyan]\n")
+
+    # Check dependencies
+    console.print("[bold]Dependencies:[/bold]")
+
+    tools = {
+        "docker": (["docker", "info"], True),  # (command, required)
+        "kubectl": (["kubectl", "version", "--client", "--short"], False),
+        "kind": (["kind", "version"], False),
+    }
+
+    all_passed = True
+
+    for tool_name, (command, required) in tools.items():
+        # Skip if specific target requested and this isn't it
+        if target != "all" and target != tool_name:
+            continue
+
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                # Extract version if available
+                version = _extract_version(result.stdout)
+                version_display = f" ({version})" if version else ""
+                console.print(
+                    f" [green]●[/green] {tool_name}: ✓ Available{version_display}"
+                )
+            else:
+                all_passed = False if required else all_passed
+                style = "red" if required else "yellow"
+                console.print(f" [{style}]●[/{style}] {tool_name}: ✗ Not available")
+        except FileNotFoundError:
+            all_passed = False if required else all_passed
+            style = "red" if required else "yellow"
+            console.print(f" [{style}]●[/{style}] {tool_name}: ✗ Not installed")
+        except Exception as e:
+            all_passed = False if required else all_passed
+            console.print(f" [yellow]●[/yellow] {tool_name}: ⚠ Check failed ({e})")
+
+    # Check environment
+    try:
+        config = AgentConfig()
+        console.print("\n[bold]Environment:[/bold]")
+        console.print(f" [cyan]●[/cyan] Provider: {config.get_provider_display_name()}")
+
+        data_dir = Path(config.data_dir)
+        if data_dir.exists() and data_dir.is_dir():
+            writable = os.access(data_dir, os.W_OK)
+            status = "exists, writable" if writable else "exists, read-only"
+            console.print(f" [cyan]●[/cyan] Data Dir: {config.data_dir} ({status})")
+        else:
+            console.print(
+                f" [yellow]●[/yellow] Data Dir: {config.data_dir} (will be created)"
+            )
+
+        console.print(f" [cyan]●[/cyan] K8s Version: {config.default_k8s_version}")
+
+    except Exception as e:
+        console.print(f" [red]●[/red] Configuration: ✗ Invalid ({e})")
+        all_passed = False
+
+    # Summary
+    if all_passed:
+        console.print("\n[green]✓ All checks passed![/green]\n")
+    else:
+        console.print("\n[yellow]⚠ Some checks failed[/yellow]\n")
+
+
+def run_config_command() -> None:
+    """Show current configuration."""
+    console.print("\n [bold cyan]☸  Butler Configuration[/bold cyan]\n")
+
+    try:
+        config = AgentConfig()
+
+        # LLM Provider section
+        console.print("[bold]LLM Provider:[/bold]")
+        if config.llm_provider == "azure":
+            console.print(f" • Provider: [cyan]Azure OpenAI[/cyan]")
+            console.print(f" • Model: [cyan]{config.model_name}[/cyan]")
+            console.print(f" • Endpoint: [cyan]{config.azure_openai_endpoint}[/cyan]")
+            console.print(f" • Deployment: [cyan]{config.azure_openai_deployment}[/cyan]")
+            console.print(f" • API Version: [cyan]{config.azure_openai_api_version}[/cyan]")
+            if config.azure_openai_api_key:
+                console.print(" • Auth: [cyan]API Key[/cyan]")
+            else:
+                console.print(" • Auth: [cyan]Azure CLI / Managed Identity[/cyan]")
+        elif config.llm_provider == "openai":
+            console.print(f" • Provider: [cyan]OpenAI[/cyan]")
+            console.print(f" • Model: [cyan]{config.model_name}[/cyan]")
+            if config.openai_base_url:
+                console.print(f" • Base URL: [cyan]{config.openai_base_url}[/cyan]")
+            if config.openai_organization:
+                console.print(f" • Organization: [cyan]{config.openai_organization}[/cyan]")
+
+        # Agent Settings section
+        console.print("\n[bold]Agent Settings:[/bold]")
+        console.print(f" • Data Directory: [cyan]{config.data_dir}[/cyan]")
+        console.print(f" • Cluster Prefix: [cyan]{config.cluster_prefix}[/cyan]")
+        console.print(f" • Default K8s Version: [cyan]{config.default_k8s_version}[/cyan]")
+        console.print(f" • Log Level: [cyan]{config.log_level}[/cyan]")
+
+        # Observability section
+        console.print("\n[bold]Observability:[/bold]")
+        if config.applicationinsights_connection_string:
+            console.print(" • Application Insights: [green]Configured[/green]")
+        else:
+            console.print(" • Application Insights: [dim]Not configured[/dim]")
+
+        console.print()
+
+    except ConfigurationError as e:
+        console.print(f"[red]Configuration Error: {e}[/red]\n")
+        sys.exit(1)
+    except Exception as e:
+        console.print(f"[red]Error loading configuration: {e}[/red]\n")
+        sys.exit(1)
 
 
 async def async_main() -> None:
@@ -471,8 +706,18 @@ async def async_main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    # Handle check command
+    if args.check is not None:
+        run_check_command(target=args.check)
+        return
+
+    # Handle config command
+    if args.config:
+        run_config_command()
+        return
+
+    # Handle single query mode
     if args.prompt:
-        # Single query mode
         await run_single_query(args.prompt, quiet=args.quiet, verbose=args.verbose)
     else:
         # Interactive chat mode
