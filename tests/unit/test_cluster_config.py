@@ -27,8 +27,8 @@ class TestClusterConfigTemplates:
             with open(template_path) as f:
                 content = f.read()
             
-            # Should be valid YAML (with placeholder)
-            # We can't fully parse it because of {name} placeholder, but we can check structure
+            # Basic structure validation before formatting
+            # Full YAML parsing is done in test_template_formatting after {name} is replaced
             assert "kind: Cluster" in content
             assert "apiVersion: kind.x-k8s.io/v1alpha4" in content
             assert "name: {name}" in content
