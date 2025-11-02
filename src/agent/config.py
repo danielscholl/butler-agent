@@ -40,6 +40,7 @@ class AgentConfig:
 
     # Agent Configuration
     data_dir: str = "./data"
+    infra_dir: str = "./data/infra"
     cluster_prefix: str = "butler-"
     default_k8s_version: str = "v1.34.0"
     log_level: str = "info"
@@ -77,6 +78,7 @@ class AgentConfig:
 
         # Agent Configuration (keeping BUTLER_ prefix for backward compatibility)
         self.data_dir = os.getenv("BUTLER_DATA_DIR", self.data_dir)
+        self.infra_dir = os.getenv("BUTLER_INFRA_DIR", self.infra_dir)
         self.cluster_prefix = os.getenv("BUTLER_CLUSTER_PREFIX", self.cluster_prefix)
         self.default_k8s_version = os.getenv("BUTLER_DEFAULT_K8S_VERSION", self.default_k8s_version)
         self.log_level = os.getenv("LOG_LEVEL", self.log_level).lower()
@@ -148,6 +150,14 @@ class AgentConfig:
             Path to kubeconfig file
         """
         return self.get_cluster_data_dir(cluster_name) / "kubeconfig"
+
+    def get_infra_path(self) -> Path:
+        """Get infrastructure directory path for custom configurations.
+
+        Returns:
+            Path to infrastructure directory
+        """
+        return Path(self.infra_dir)
 
     def get_provider_display_name(self) -> str:
         """Get friendly display name for the current provider.
