@@ -10,7 +10,8 @@ from typing import Any
 from butler.clients import create_chat_client
 from butler.cluster.tools import CLUSTER_TOOLS, initialize_tools
 from butler.config import ButlerConfig
-from butler.middleware import create_function_middleware
+from butler.memory import ClusterMemory, ConversationMetricsMemory
+from butler.middleware import create_middleware
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class ButlerAgent:
         config: ButlerConfig | None = None,
         chat_client: Any | None = None,
         mcp_tools: list | None = None,
+        enable_memory: bool = True,
     ):
         """Initialize Butler Agent.
 
@@ -69,6 +71,7 @@ class ButlerAgent:
             config: Butler configuration (required if chat_client not provided)
             chat_client: Optional chat client for dependency injection (testing)
             mcp_tools: Optional list of MCP tools to register
+            enable_memory: Enable memory/context providers for learning user preferences
 
         Raises:
             ValueError: If neither config nor chat_client is provided
@@ -115,19 +118,47 @@ class ButlerAgent:
             tools.extend(mcp_tools)
             logger.info(f"Registered {len(mcp_tools)} MCP tools")
 
-        # Create middleware
-        middleware = create_function_middleware()
+        # Create middleware (both agent and function levels)
+        middleware_config = create_middleware()
+
+        # Create context providers (memory) if enabled
+        context_providers = []
+        if enable_memory:
+            try:
+                context_providers = [
+                    ClusterMemory(chat_client=self.chat_client),
+                    ConversationMetricsMemory(),
+                ]
+                logger.info("Memory context providers enabled")
+            except Exception as e:
+                logger.warning(f"Failed to create context providers: {e}")
+                # Continue without memory if it fails
+                context_providers = []
 
         # Create agent using framework's create_agent() pattern
         try:
-            self.agent = self.chat_client.create_agent(
-                name="Butler",
-                instructions=SYSTEM_PROMPT,
-                tools=tools,
-                middleware=middleware,
+            # Prepare agent creation kwargs
+            agent_kwargs = {
+                "name": "Butler",
+                "instructions": SYSTEM_PROMPT,
+                "tools": tools,
+                "middleware": middleware_config["function"],  # Function middleware
+            }
+
+            # Add context providers if available
+            if context_providers:
+                agent_kwargs["context_providers"] = context_providers
+
+            self.agent = self.chat_client.create_agent(**agent_kwargs)
+
+            logger.info(
+                f"Butler Agent initialized with {len(tools)} tools, "
+                f"{len(middleware_config['function'])} function middleware, "
+                f"and {len(context_providers)} context providers"
             )
 
-            logger.info(f"Butler Agent initialized with {len(tools)} tools")
+            # Store agent middleware for potential use at run time
+            self._agent_middleware = middleware_config["agent"]
 
         except Exception as e:
             logger.error(f"Failed to create agent: {e}")

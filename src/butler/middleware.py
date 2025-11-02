@@ -5,14 +5,72 @@ in the agent request/response pipeline.
 """
 
 import logging
-from collections.abc import Callable
+import time
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
-from agent_framework import ChatMessage, FunctionInvocationContext, FunctionMiddleware
+from agent_framework import (
+    AgentRunContext,
+    FunctionInvocationContext,
+    FunctionMiddleware,
+)
 
 from butler.activity import activity_tracker
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Agent-Level Middleware
+# ============================================================================
+
+
+async def agent_run_logging_middleware(
+    context: AgentRunContext,
+    next: Callable[[AgentRunContext], Awaitable[None]],
+) -> None:
+    """Log agent execution lifecycle.
+
+    Args:
+        context: Agent run context
+        next: Next middleware in chain
+    """
+    logger.debug("Agent run starting...")
+
+    try:
+        await next(context)
+        logger.debug("Agent run completed successfully")
+    except Exception as e:
+        logger.error(f"Agent run failed: {e}")
+        raise
+
+
+async def agent_observability_middleware(
+    context: AgentRunContext,
+    next: Callable[[AgentRunContext], Awaitable[None]],
+) -> None:
+    """Track agent execution metrics and timing.
+
+    Args:
+        context: Agent run context
+        next: Next middleware in chain
+    """
+    start_time = time.time()
+
+    try:
+        await next(context)
+    finally:
+        duration = time.time() - start_time
+        logger.info(f"Agent execution took {duration:.2f}s")
+
+        # Could send to Application Insights or other observability platform
+        # if config.applicationinsights_connection_string:
+        #     track_metric("agent_execution_duration", duration)
+
+
+# ============================================================================
+# Function-Level Middleware
+# ============================================================================
 
 
 async def logging_function_middleware(
@@ -39,36 +97,6 @@ async def logging_function_middleware(
         return result
     except Exception as e:
         logger.error(f"Tool call {tool_name} failed: {e}")
-        raise
-
-
-async def logging_chat_middleware(
-    messages: list[ChatMessage],
-    next: Callable,
-) -> Any:
-    """Middleware to log chat interactions.
-
-    Args:
-        messages: Chat messages
-        next: Next middleware in chain
-
-    Returns:
-        Result from next middleware
-    """
-    # Log the last user message
-    user_messages = [m for m in messages if m.role == "user"]
-    if user_messages:
-        last_message = user_messages[-1]
-        # ChatMessage uses 'text' attribute, not 'content'
-        message_text = getattr(last_message, "text", str(last_message))
-        logger.info(f"User query: {message_text[:100]}...")
-
-    try:
-        result = await next(messages)
-        logger.debug("Chat completion successful")
-        return result
-    except Exception as e:
-        logger.error(f"Chat completion failed: {e}")
         raise
 
 
@@ -99,13 +127,29 @@ async def activity_tracking_middleware(
         raise
 
 
-def create_function_middleware() -> list[FunctionMiddleware]:
-    """Create list of function middleware.
+def create_middleware() -> dict[str, list]:
+    """Create middleware for agent and function levels.
 
     Returns:
-        List of middleware functions
+        Dict with 'agent' and 'function' middleware lists
     """
-    return [
-        cast(FunctionMiddleware, logging_function_middleware),
-        cast(FunctionMiddleware, activity_tracking_middleware),
-    ]
+    return {
+        "agent": [
+            agent_run_logging_middleware,
+            agent_observability_middleware,
+        ],
+        "function": [
+            cast(FunctionMiddleware, logging_function_middleware),
+            cast(FunctionMiddleware, activity_tracking_middleware),
+        ],
+    }
+
+
+# Backward compatibility
+def create_function_middleware() -> list[FunctionMiddleware]:
+    """Create list of function middleware (legacy).
+
+    Returns:
+        List of function middleware
+    """
+    return create_middleware()["function"]

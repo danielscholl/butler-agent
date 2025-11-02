@@ -11,11 +11,13 @@ Butler Agent provides a natural language interface for managing Kubernetes in Do
 ## Features
 
 - **Conversational Interface**: Manage clusters using natural language with multi-turn conversation support
+- **Conversation Persistence**: Save and resume conversations across sessions
+- **Memory & Learning**: Agent learns your preferences and provides personalized suggestions
 - **Multi-Provider LLM Support**: Works with OpenAI and Azure OpenAI
 - **KinD Cluster Management**: Create, delete, list, and monitor local Kubernetes clusters
 - **Rich Console Output**: Beautiful formatted output with tables, panels, and progress indicators
 - **Intelligent Error Handling**: Context-aware error messages and troubleshooting suggestions
-- **Observability**: Optional Azure Application Insights integration
+- **Observability**: Optional Azure Application Insights integration with execution metrics
 
 ## Quick Start
 
@@ -106,6 +108,40 @@ You: yes
 Butler: ✓ Cluster 'dev-env' deleted successfully
 ```
 
+## Conversation Management
+
+Butler now supports saving and resuming conversations, allowing you to maintain context across sessions:
+
+```bash
+# Save your current conversation
+/save my-dev-setup
+
+# List all saved conversations
+/list
+
+# Load a previous conversation
+/load my-dev-setup
+
+# Delete a saved conversation
+/delete old-conversation
+
+# Start a fresh conversation (reset context)
+/new
+```
+
+Conversations are automatically saved to `~/.butler/conversations/` and include all context, preferences, and history.
+
+## Memory & Learning
+
+Butler learns from your interactions to provide a personalized experience:
+
+- **Cluster Preferences**: Remembers your preferred cluster configurations (minimal, default, custom)
+- **Naming Patterns**: Learns and suggests cluster naming patterns based on your history
+- **Kubernetes Versions**: Remembers your preferred K8s versions
+- **Usage Metrics**: Tracks session statistics and successful operations
+
+The agent will provide smarter suggestions based on your past behavior!
+
 ## Cluster Configurations
 
 Butler supports three cluster configurations:
@@ -179,7 +215,9 @@ Butler Agent is built on proven patterns from the OSDU community:
 - **Agent Framework**: Microsoft Agent Framework for structured LLM interactions
 - **Multi-Provider Support**: Flexible LLM provider selection via factory pattern
 - **Tool-Based Architecture**: Extensible tool system for cluster operations
-- **Middleware Pipeline**: Logging, activity tracking, and observability
+- **Middleware Pipeline**: Agent and function-level middleware for logging and observability
+- **Memory System**: Context providers for learning user preferences and patterns
+- **Conversation Persistence**: Thread serialization for saving/loading conversations
 - **Rich Console**: Beautiful formatting with Rich library
 
 ### Components
@@ -190,8 +228,10 @@ butler-agent/
 │   ├── agent.py           # Core agent with LLM orchestration
 │   ├── cli.py             # CLI interface and interactive mode
 │   ├── config.py          # Multi-provider configuration
-│   ├── llm_client.py      # LLM client factory
-│   ├── middleware.py      # Request/response pipeline
+│   ├── clients.py         # LLM client factory
+│   ├── middleware.py      # Agent and function middleware pipeline
+│   ├── memory.py          # Context providers for learning preferences
+│   ├── persistence.py     # Conversation save/load management
 │   ├── activity.py        # Activity tracking
 │   ├── observability.py   # Telemetry integration
 │   ├── cluster/           # Cluster management

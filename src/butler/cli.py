@@ -20,6 +20,7 @@ from butler import __version__
 from butler.agent import ButlerAgent
 from butler.config import ButlerConfig
 from butler.observability import initialize_observability
+from butler.persistence import ThreadPersistence
 from butler.utils.errors import ConfigurationError
 
 console = Console()
@@ -157,9 +158,8 @@ def _render_startup_banner(config: ButlerConfig) -> None:
 
     console.print(f"    • kind: [{kind_style}]{kind_status}[/{kind_style}]")
 
-    console.print(
-        "\n[dim]Type 'exit' or 'quit' to exit, 'help' for help, '/new' for new conversation[/dim]\n"
-    )
+    console.print("\n[dim]Type 'exit' or 'quit' to exit, 'help' for help[/dim]")
+    console.print("[dim]Commands: /new /save /load /list /delete - Type 'help' for details[/dim]\n")
 
 
 def _render_prompt_area(config: ButlerConfig) -> str:
@@ -209,6 +209,9 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
         thread = agent.get_new_thread()
         message_count = 0
 
+        # Initialize persistence manager
+        persistence = ThreadPersistence()
+
         # Setup prompt session with history
         history_file = Path.home() / ".butler_history"
         session: PromptSession = PromptSession(history=FileHistory(str(history_file)))
@@ -245,6 +248,82 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
                     thread = agent.get_new_thread()
                     message_count = 0
                     console.print("[green]✓ Started new conversation[/green]\n")
+                    continue
+
+                # Handle /save command to save conversation
+                if user_input.startswith("/save"):
+                    parts = user_input.split(maxsplit=1)
+                    if len(parts) < 2:
+                        console.print("[red]Usage: /save <name>[/red]")
+                        continue
+
+                    name = parts[1].strip()
+                    try:
+                        await persistence.save_thread(thread, name)
+                        console.print(f"[green]✓ Conversation saved as '{name}'[/green]\n")
+                    except Exception as e:
+                        console.print(f"[red]Failed to save conversation: {e}[/red]\n")
+                        if verbose:
+                            console.print_exception()
+                    continue
+
+                # Handle /load command to load conversation
+                if user_input.startswith("/load"):
+                    parts = user_input.split(maxsplit=1)
+                    if len(parts) < 2:
+                        console.print("[red]Usage: /load <name>[/red]")
+                        continue
+
+                    name = parts[1].strip()
+                    try:
+                        thread = await persistence.load_thread(agent, name)
+                        # Try to get message count from thread if possible
+                        message_count = len(thread.messages) if hasattr(thread, "messages") else 0
+                        console.print(
+                            f"[green]✓ Conversation '{name}' loaded "
+                            f"({message_count} messages)[/green]\n"
+                        )
+                    except FileNotFoundError:
+                        console.print(f"[red]Conversation '{name}' not found[/red]\n")
+                    except Exception as e:
+                        console.print(f"[red]Failed to load conversation: {e}[/red]\n")
+                        if verbose:
+                            console.print_exception()
+                    continue
+
+                # Handle /list command to list saved conversations
+                if cmd == "/list":
+                    conversations = persistence.list_conversations()
+                    if conversations:
+                        console.print("\n[bold]Saved Conversations:[/bold]")
+                        for conv in conversations:
+                            desc = conv.get("description") or "[dim]No description[/dim]"
+                            created = conv.get("created_at", "")[:10]  # Just date
+                            console.print(f"  • [cyan]{conv['name']}[/cyan] ({created})")
+                            if conv.get("description"):
+                                console.print(f"    {desc}")
+                    else:
+                        console.print("[dim]No saved conversations[/dim]")
+                    console.print()
+                    continue
+
+                # Handle /delete command to delete saved conversation
+                if user_input.startswith("/delete"):
+                    parts = user_input.split(maxsplit=1)
+                    if len(parts) < 2:
+                        console.print("[red]Usage: /delete <name>[/red]")
+                        continue
+
+                    name = parts[1].strip()
+                    try:
+                        if persistence.delete_conversation(name):
+                            console.print(f"[green]✓ Conversation '{name}' deleted[/green]\n")
+                        else:
+                            console.print(f"[red]Conversation '{name}' not found[/red]\n")
+                    except Exception as e:
+                        console.print(f"[red]Failed to delete conversation: {e}[/red]\n")
+                        if verbose:
+                            console.print_exception()
                     continue
 
                 # Execute query with conversation thread
@@ -352,7 +431,11 @@ def _show_help() -> None:
 - **exit, quit, q** - Exit Butler
 - **help, ?** - Show this help
 - **clear** - Clear screen
-- **/new, new** - Start a new conversation (reset context)
+- **/new** - Start a new conversation (reset context)
+- **/save <name>** - Save current conversation
+- **/load <name>** - Load a saved conversation
+- **/list** - List all saved conversations
+- **/delete <name>** - Delete a saved conversation
 
 ## Example Queries
 
@@ -362,12 +445,22 @@ def _show_help() -> None:
 - "Delete the test-cluster"
 - "Create a minimal cluster called quick-test"
 
+## Conversation Management
+
+Save your work and resume later:
+```
+/save my-dev-setup
+/list
+/load my-dev-setup
+```
+
 ## Tips
 
 - Cluster names should be lowercase with hyphens
 - You can specify cluster configuration: minimal, default, or custom
 - Use `butler -p "your query"` for single commands
 - Use `butler -v` for verbose output with debugging info
+- Conversations are saved to ~/.butler/conversations/
     """
 
     console.print(Markdown(help_text))
