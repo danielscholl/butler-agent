@@ -53,3 +53,27 @@ class InvalidConfigError(ConfigurationError):
     """Raised when a configuration file is invalid or malformed."""
 
     pass
+
+
+class KubectlCommandError(ButlerError):
+    """Raised when a kubectl CLI command fails."""
+
+    pass
+
+
+class KubeconfigNotFoundError(ButlerError):
+    """Raised when a kubeconfig file cannot be found."""
+
+    pass
+
+
+class ResourceNotFoundError(ButlerError):
+    """Raised when a Kubernetes resource cannot be found."""
+
+    pass
+
+
+class InvalidManifestError(ButlerError):
+    """Raised when a Kubernetes manifest is invalid or malformed."""
+
+    pass
