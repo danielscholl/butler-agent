@@ -3,6 +3,8 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 
 from agent.cli import build_parser, run_single_query
 
@@ -179,6 +181,38 @@ class TestInteractiveMode:
         prompt = _render_prompt_area()
 
         assert prompt == "> "
+
+    def test_create_key_bindings(self):
+        """Test key bindings creation for ESC key."""
+        from agent.cli import _create_key_bindings
+
+        key_bindings = _create_key_bindings()
+
+        # Verify that key_bindings is a KeyBindings object
+        assert key_bindings is not None
+        assert isinstance(key_bindings, KeyBindings)
+
+    def test_esc_key_clears_buffer(self):
+        """Test that ESC key binding clears the buffer text."""
+        from agent.cli import _create_key_bindings
+
+        # Create key bindings
+        kb = _create_key_bindings()
+
+        # Create mock event with buffer containing text
+        mock_event = MagicMock()
+        mock_buffer = MagicMock()
+        mock_buffer.text = "Some test text"
+        mock_event.app.current_buffer = mock_buffer
+
+        # Find and execute the ESC binding
+        for binding in kb.bindings:
+            if binding.keys == (Keys.Escape,):
+                binding.handler(mock_event)
+                break
+
+        # Verify buffer was cleared
+        assert mock_buffer.text == ""
 
     def test_show_help(self):
         """Test help display."""
