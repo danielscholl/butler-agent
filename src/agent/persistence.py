@@ -178,6 +178,7 @@ class ThreadPersistence:
                         break
 
             # Serialize thread
+            serialized = None
             try:
                 # Try async serialize first
                 if hasattr(thread, "serialize"):
@@ -190,10 +191,16 @@ class ThreadPersistence:
                         serialized = thread.serialize()
                 else:
                     raise AttributeError("Thread has no serialize method")
-            except (AttributeError, TypeError, json.JSONDecodeError) as serialize_error:
-                # Fallback: Manual serialization if framework serialize fails
+
+                # Verify the serialized data is actually JSON-serializable
+                # Try to serialize and deserialize to check
+                json.dumps(serialized)
+
+            except (AttributeError, TypeError, json.JSONDecodeError, Exception) as serialize_error:
+                # Fallback: Manual serialization if framework serialize fails or returns non-JSON data
                 logger.warning(
-                    f"Thread serialize() failed: {serialize_error}. Using fallback serialization."
+                    f"Thread serialization failed or returned non-JSON data: {serialize_error}. "
+                    "Using fallback serialization."
                 )
                 serialized = self._fallback_serialize(thread)
 

@@ -236,13 +236,21 @@ class TestThreadPersistence:
 
     @pytest.mark.asyncio
     async def test_save_thread_serialization_error(self, persistence):
-        """Test saving thread handles serialization errors."""
+        """Test saving thread handles serialization errors with fallback."""
         # Create thread that fails serialization
         bad_thread = AsyncMock()
         bad_thread.serialize = AsyncMock(side_effect=Exception("Serialization failed"))
+        bad_thread.messages = []  # Empty messages for fallback
 
-        with pytest.raises(Exception, match="Serialization failed"):
-            await persistence.save_thread(bad_thread, "test")
+        # Should NOT raise - should use fallback serialization
+        file_path = await persistence.save_thread(bad_thread, "test")
+
+        # Verify file was created with fallback
+        assert file_path.exists()
+        with open(file_path) as f:
+            data = json.load(f)
+            # Check fallback metadata
+            assert data["thread"]["metadata"]["fallback"] is True
 
     @pytest.mark.asyncio
     async def test_load_thread_deserialization_error(self, persistence, mock_thread, mock_agent):
