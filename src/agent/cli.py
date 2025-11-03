@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +28,7 @@ from agent.utils.keybindings import (
     ClearPromptHandler,
     KeybindingManager,
 )
-from agent.utils.terminal import clear_screen
+from agent.utils.terminal import TIMEOUT_EXIT_CODE, clear_screen
 
 console = Console()
 
@@ -85,8 +86,6 @@ async def _auto_save_session(
         return
 
     try:
-        from datetime import datetime
-
         timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
         session_name = f"auto-{timestamp}"
 
@@ -433,7 +432,7 @@ async def run_chat_mode(
                     # Display exit code
                     if exit_code == 0:
                         console.print(f"\n[dim][green]Exit code: {exit_code}[/green][/dim]")
-                    elif exit_code == 124:
+                    elif exit_code == TIMEOUT_EXIT_CODE:
                         console.print(
                             f"\n[dim][yellow]Exit code: {exit_code} (timeout)[/yellow][/dim]"
                         )
@@ -486,8 +485,6 @@ async def run_chat_mode(
                         created = conv.get("created_at", "")
                         # Calculate time ago
                         try:
-                            from datetime import datetime
-
                             created_dt = datetime.fromisoformat(created)
                             now = datetime.now()
                             delta = now - created_dt

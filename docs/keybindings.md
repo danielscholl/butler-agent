@@ -400,7 +400,8 @@ The keybinding system is built using a modular, extensible architecture:
 - **KeybindingManager:** Central registry for registering and managing handlers
 - **Concrete Handlers:**
   - `ClearPromptHandler` - ESC key functionality
-  - `ShellCommandHandler` - ! key functionality
+
+**Note:** Shell commands (the `!` prefix functionality) are handled directly in the main loop (`cli.py`), not via a keybinding handler. This prevents interference with the default Enter key behavior.
 
 This architecture makes it easy to add new keybindings in the future. See [CONTRIBUTING.md](../CONTRIBUTING.md) for details on adding custom keybindings.
 

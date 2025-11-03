@@ -38,11 +38,11 @@ class KeybindingManager:
     def register_handler(self, handler: KeybindingHandler) -> None:
         """Register a keybinding handler.
 
+        If a handler with the same trigger key is already registered, the existing handler
+        will be replaced and a warning will be logged.
+
         Args:
             handler: KeybindingHandler instance to register
-
-        Raises:
-            ValueError: If a handler with the same trigger key is already registered
         """
         trigger_key = handler.trigger_key
         if trigger_key in self._handlers:
@@ -94,12 +94,6 @@ class KeybindingManager:
             trigger_display = handler.trigger_key.upper()
             if handler.trigger_key == "escape":
                 trigger_display = "ESC"
-            elif handler.trigger_key == "enter":
-                # Special case for ShellCommandHandler - show the actual usage
-                if "shell" in handler.description.lower() or "!" in handler.description:
-                    trigger_display = "!<cmd>"
-                else:
-                    trigger_display = "ENTER"
 
             help_lines.append(f"  {trigger_display:10} - {handler.description}")
 

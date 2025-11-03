@@ -4,12 +4,16 @@ This module provides functionality to save and load conversation threads,
 enabling users to maintain conversation history across sessions.
 """
 
+import inspect
 import json
 import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from rich.console import Console
+from rich.markdown import Markdown
 
 logger = logging.getLogger(__name__)
 
@@ -123,8 +127,6 @@ class ThreadPersistence:
                 user_requests.append(content[:200])  # Truncate long messages
 
                 # Extract cluster names mentioned
-                import re
-
                 cluster_matches = re.findall(
                     r"cluster[s]?\s+(?:called|named)?\s+['\"]?([a-z0-9-]+)", content, re.IGNORECASE
                 )
@@ -298,8 +300,6 @@ class ThreadPersistence:
             try:
                 # Try async serialize first
                 if hasattr(thread, "serialize"):
-                    import inspect
-
                     if inspect.iscoroutinefunction(thread.serialize):
                         serialized = await thread.serialize()
                     else:
@@ -392,9 +392,6 @@ class ThreadPersistence:
                 )
 
                 # Display the conversation history to the user
-                from rich.console import Console
-                from rich.markdown import Markdown
-
                 console = Console()
                 messages = thread_data.get("messages", [])
 

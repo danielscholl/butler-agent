@@ -38,8 +38,10 @@ class KeybindingHandler(ABC):
     def trigger_key(self) -> str:
         """Key or key combination that triggers this handler.
 
+        Must use prompt_toolkit key names (see prompt_toolkit documentation).
+
         Returns:
-            String representation of the key (e.g., "escape", "!", "c-x" for Ctrl+X)
+            String representation of the key (e.g., "escape", "enter", "c-x" for Ctrl+X)
         """
         pass
 

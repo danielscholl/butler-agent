@@ -127,7 +127,7 @@ class TestExecuteShellCommand:
         mock_run.return_value = mock_result
 
         # Execute with custom timeout
-        exit_code, stdout, stderr = execute_shell_command("echo test", timeout=60)
+        execute_shell_command("echo test", timeout=60)
 
         # Verify timeout was passed
         assert mock_run.call_args[1]["timeout"] == 60
@@ -143,7 +143,7 @@ class TestExecuteShellCommand:
         mock_run.return_value = mock_result
 
         # Execute with custom cwd
-        exit_code, stdout, stderr = execute_shell_command("pwd", cwd="/tmp")
+        execute_shell_command("pwd", cwd="/tmp")
 
         # Verify cwd was passed
         assert mock_run.call_args[1]["cwd"] == "/tmp"

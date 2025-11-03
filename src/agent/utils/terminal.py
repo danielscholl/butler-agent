@@ -10,6 +10,9 @@ import sys
 
 logger = logging.getLogger(__name__)
 
+# Exit code constants
+TIMEOUT_EXIT_CODE = 124  # Standard timeout exit code
+
 
 def clear_screen() -> bool:
     """Clear the terminal screen.
@@ -86,7 +89,7 @@ def execute_shell_command(
     except subprocess.TimeoutExpired:
         error_msg = f"Command timed out after {timeout}s"
         logger.warning(f"Shell command timeout: {command}")
-        return (124, "", error_msg)  # 124 is conventional timeout exit code
+        return (TIMEOUT_EXIT_CODE, "", error_msg)
 
     except Exception as e:
         error_msg = f"Command execution failed: {str(e)}"
