@@ -156,7 +156,7 @@ class ThreadPersistence:
 
         return "\n".join(summary_parts)
 
-    def _fallback_serialize(self, thread: Any) -> dict:
+    async def _fallback_serialize(self, thread: Any) -> dict:
         """Fallback serialization when thread.serialize() fails.
 
         Manually extracts messages and converts them to JSON-serializable format.
@@ -171,20 +171,34 @@ class ThreadPersistence:
 
         # Debug: Check what attributes the thread has
         logger.debug(f"Thread type: {type(thread)}")
-        logger.debug(f"Thread attributes: {dir(thread)}")
-        logger.debug(f"Has messages: {hasattr(thread, 'messages')}")
-        if hasattr(thread, "messages"):
-            logger.debug(f"Messages count: {len(thread.messages) if thread.messages else 0}")
+        logger.debug(f"Thread has message_store: {hasattr(thread, 'message_store')}")
 
-        if hasattr(thread, "messages") and thread.messages:
-            for msg in thread.messages:
+        # Extract messages from message_store (Agent Framework pattern)
+        messages = []
+        if hasattr(thread, "message_store") and thread.message_store:
+            try:
+                messages = await thread.message_store.list_messages()
+                logger.debug(f"Extracted {len(messages)} messages from message_store")
+            except Exception as e:
+                logger.warning(f"Failed to list messages from store: {e}")
+
+        if messages:
+            for msg in messages:
                 msg_dict = {"role": getattr(msg, "role", "unknown")}
 
                 # Extract message content
                 if hasattr(msg, "text"):
                     msg_dict["content"] = str(msg.text)
                 elif hasattr(msg, "content"):
-                    msg_dict["content"] = str(msg.content)
+                    # Content can be string or list of content blocks
+                    content = msg.content
+                    if isinstance(content, str):
+                        msg_dict["content"] = content
+                    elif isinstance(content, list):
+                        # Join content blocks
+                        msg_dict["content"] = " ".join(str(block) for block in content)
+                    else:
+                        msg_dict["content"] = str(content)
                 else:
                     msg_dict["content"] = str(msg)
 
@@ -230,19 +244,51 @@ class ThreadPersistence:
         logger.info(f"Saving conversation '{safe_name}'...")
 
         try:
-            # Extract first message for preview
+            # Debug: Inspect thread structure
+            logger.debug(f"Saving thread type: {type(thread)}")
+            logger.debug(f"Thread has 'messages' attr: {hasattr(thread, 'messages')}")
+
+            # Check various possible message storage locations
+            possible_attrs = [
+                "messages",
+                "_messages",
+                "history",
+                "_history",
+                "turns",
+                "conversation",
+            ]
+            for attr in possible_attrs:
+                if hasattr(thread, attr):
+                    value = getattr(thread, attr)
+                    logger.debug(
+                        f"Thread.{attr} = {type(value)}, len={len(value) if hasattr(value, '__len__') else 'N/A'}"
+                    )
+
+            # Extract first message for preview from message_store
             first_message = ""
             message_count = 0
-            if hasattr(thread, "messages") and thread.messages:
-                message_count = len(thread.messages)
-                # Try to get first user message
-                for msg in thread.messages:
-                    if hasattr(msg, "role") and msg.role == "user":
-                        if hasattr(msg, "text"):
-                            first_message = str(msg.text)[:100]
-                        elif hasattr(msg, "content"):
-                            first_message = str(msg.content)[:100]
-                        break
+            if hasattr(thread, "message_store") and thread.message_store:
+                try:
+                    messages = await thread.message_store.list_messages()
+                    message_count = len(messages)
+                    logger.debug(f"Extracting preview from {message_count} messages")
+
+                    # Try to get first user message
+                    for msg in messages:
+                        if hasattr(msg, "role") and msg.role == "user":
+                            if hasattr(msg, "text"):
+                                first_message = str(msg.text)[:100]
+                            elif hasattr(msg, "content"):
+                                content = msg.content
+                                if isinstance(content, str):
+                                    first_message = content[:100]
+                                else:
+                                    first_message = str(content)[:100]
+                            break
+                except Exception as e:
+                    logger.warning(f"Failed to extract first message: {e}")
+            else:
+                logger.warning("Thread has no message_store!")
 
             # Serialize thread
             serialized = None
@@ -269,7 +315,7 @@ class ThreadPersistence:
                     f"Thread serialization failed or returned non-JSON data: {serialize_error}. "
                     "Using fallback serialization."
                 )
-                serialized = self._fallback_serialize(thread)
+                serialized = await self._fallback_serialize(thread)
 
             # Add metadata
             conversation_data = {
