@@ -82,7 +82,8 @@ class ShellCommandHandler(KeybindingHandler):
 
         # Only process if line starts with !
         if not current_text.startswith("!"):
-            # Not a shell command, let normal processing continue
+            # Not a shell command, trigger default Enter behavior (submit to AI)
+            buffer.validate_and_handle()
             return
 
         # Extract the command (strip the leading !)
