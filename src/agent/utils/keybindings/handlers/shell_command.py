@@ -1,7 +1,7 @@
-"""Shell command handler for ! key.
+"""Shell command handler for commands starting with !
 
-This handler allows executing shell commands directly from Butler's interactive
-prompt by pressing '!' followed by the command.
+This handler intercepts commands that start with ! and executes them as shell
+commands instead of sending them to the AI agent.
 """
 
 import logging
@@ -17,15 +17,11 @@ console = Console()
 
 
 class ShellCommandHandler(KeybindingHandler):
-    """Handler that executes shell commands when ! is pressed.
+    """Handler that executes shell commands when Enter is pressed on lines starting with !
 
     This handler provides a quick way to run shell commands without leaving
-    Butler's interactive session. When the user presses '!' at the beginning
-    of a line (or when the buffer is empty), they can type a shell command
-    that will be executed immediately.
-
-    The output (stdout, stderr, and exit code) is displayed inline, and then
-    the prompt returns to normal Butler mode.
+    Butler's interactive session. When the user types a command starting with !
+    and presses Enter, it executes as a shell command instead of being sent to the AI.
 
     Example usage:
         !ls -la                 # List files
@@ -41,12 +37,12 @@ class ShellCommandHandler(KeybindingHandler):
 
     @property
     def trigger_key(self) -> str:
-        """! key triggers this handler.
+        """Enter key triggers this handler when line starts with !
 
         Returns:
-            "!" - the exclamation mark key
+            "enter" - the Enter/Return key
         """
-        return "!"
+        return "enter"
 
     @property
     def description(self) -> str:
@@ -57,12 +53,26 @@ class ShellCommandHandler(KeybindingHandler):
         """
         return "Execute shell command directly (e.g., !ls, !docker ps)"
 
+    def should_handle(self, event: Any) -> bool:
+        """Check if this handler should process the event.
+
+        Only handles Enter key presses when the buffer text starts with !
+
+        Args:
+            event: prompt_toolkit KeyPressEvent
+
+        Returns:
+            True if buffer starts with !, False otherwise
+        """
+        buffer = event.app.current_buffer
+        text = buffer.text.strip()
+        return text.startswith("!")
+
     def handle(self, event: Any) -> None:
         """Handle shell command execution.
 
-        When '!' is pressed and the buffer is empty or starts with '!', this
-        handler intercepts the input, prompts for a command, executes it, and
-        displays the results.
+        When Enter is pressed on a line starting with !, this handler
+        intercepts it, extracts the command, executes it, and displays results.
 
         Args:
             event: prompt_toolkit KeyPressEvent
@@ -70,27 +80,23 @@ class ShellCommandHandler(KeybindingHandler):
         buffer = event.app.current_buffer
         current_text = buffer.text.strip()
 
-        # Only trigger if buffer is empty or already starts with !
-        # This prevents triggering in the middle of Butler queries
-        if current_text and not current_text.startswith("!"):
-            # Let the ! character be inserted normally
-            buffer.insert_text("!")
+        # Only process if line starts with !
+        if not current_text.startswith("!"):
+            # Not a shell command, let normal processing continue
             return
 
-        logger.debug("ShellCommandHandler: Triggering shell command mode")
-
-        # If buffer is empty, insert ! to indicate shell mode
-        if not current_text:
-            buffer.insert_text("!")
-            return
-
-        # Buffer starts with !, so we're in shell command mode
         # Extract the command (strip the leading !)
         command = current_text[1:].strip()
 
         if not command:
-            # User just pressed ! again, do nothing
+            # Just "!" with no command, clear buffer and return
+            buffer.text = ""
+            console.print(
+                "\n[yellow]No command specified. Type !<command> to execute shell commands.[/yellow]\n"
+            )
             return
+
+        logger.debug(f"ShellCommandHandler: Executing shell command: {command}")
 
         # Clear the buffer
         buffer.text = ""
@@ -105,6 +111,10 @@ class ShellCommandHandler(KeybindingHandler):
         self._display_output(exit_code, stdout, stderr)
 
         logger.info(f"Shell command executed: {command} (exit code: {exit_code})")
+
+        # Prevent the default Enter behavior (don't send to AI)
+        # This is critical - we've handled the command, don't process further
+        return None
 
     def _display_output(self, exit_code: int, stdout: str, stderr: str) -> None:
         """Display command output with formatting.

@@ -62,9 +62,9 @@ class TestShellCommandHandler:
     """Tests for ShellCommandHandler."""
 
     def test_trigger_key(self):
-        """Test that trigger key is '!'."""
+        """Test that trigger key is 'enter'."""
         handler = ShellCommandHandler()
-        assert handler.trigger_key == "!"
+        assert handler.trigger_key == "enter"
 
     def test_description(self):
         """Test that description is set."""
@@ -72,6 +72,36 @@ class TestShellCommandHandler:
         assert isinstance(handler.description, str)
         assert len(handler.description) > 0
         assert "shell" in handler.description.lower() or "command" in handler.description.lower()
+
+    def test_should_handle_with_shell_command(self):
+        """Test that should_handle returns True for commands starting with !"""
+        handler = ShellCommandHandler()
+
+        # Create mock event with shell command
+        mock_buffer = MagicMock()
+        mock_buffer.text = "!ls -la"
+        mock_app = MagicMock()
+        mock_app.current_buffer = mock_buffer
+        mock_event = MagicMock()
+        mock_event.app = mock_app
+
+        result = handler.should_handle(mock_event)
+        assert result is True
+
+    def test_should_handle_with_normal_text(self):
+        """Test that should_handle returns False for normal text."""
+        handler = ShellCommandHandler()
+
+        # Create mock event with normal text
+        mock_buffer = MagicMock()
+        mock_buffer.text = "create a cluster"
+        mock_app = MagicMock()
+        mock_app.current_buffer = mock_buffer
+        mock_event = MagicMock()
+        mock_event.app = mock_app
+
+        result = handler.should_handle(mock_event)
+        assert result is False
 
     @patch("agent.utils.keybindings.handlers.shell_command.execute_shell_command")
     @patch("agent.utils.keybindings.handlers.shell_command.console")
@@ -85,7 +115,6 @@ class TestShellCommandHandler:
         # Create mock event with command in buffer
         mock_buffer = MagicMock()
         mock_buffer.text = "!ls -la"
-        mock_buffer.insert_text = MagicMock()
         mock_app = MagicMock()
         mock_app.current_buffer = mock_buffer
         mock_event = MagicMock()
@@ -102,62 +131,13 @@ class TestShellCommandHandler:
 
     @patch("agent.utils.keybindings.handlers.shell_command.execute_shell_command")
     @patch("agent.utils.keybindings.handlers.shell_command.console")
-    def test_handle_with_empty_buffer_inserts_exclamation(self, mock_console, mock_execute):
-        """Test that handle() inserts ! when buffer is empty."""
-        handler = ShellCommandHandler()
-
-        # Create mock event with empty buffer
-        mock_buffer = MagicMock()
-        mock_buffer.text = ""
-        mock_buffer.insert_text = MagicMock()
-        mock_app = MagicMock()
-        mock_app.current_buffer = mock_buffer
-        mock_event = MagicMock()
-        mock_event.app = mock_app
-
-        # Call handle
-        handler.handle(mock_event)
-
-        # Verify ! was inserted
-        mock_buffer.insert_text.assert_called_once_with("!")
-
-        # Verify command was not executed
-        mock_execute.assert_not_called()
-
-    @patch("agent.utils.keybindings.handlers.shell_command.execute_shell_command")
-    @patch("agent.utils.keybindings.handlers.shell_command.console")
-    def test_handle_with_non_shell_text_inserts_exclamation(self, mock_console, mock_execute):
-        """Test that handle() inserts ! when buffer has non-shell text."""
-        handler = ShellCommandHandler()
-
-        # Create mock event with non-shell text
-        mock_buffer = MagicMock()
-        mock_buffer.text = "create a cluster"
-        mock_buffer.insert_text = MagicMock()
-        mock_app = MagicMock()
-        mock_app.current_buffer = mock_buffer
-        mock_event = MagicMock()
-        mock_event.app = mock_app
-
-        # Call handle
-        handler.handle(mock_event)
-
-        # Verify ! was inserted
-        mock_buffer.insert_text.assert_called_once_with("!")
-
-        # Verify command was not executed
-        mock_execute.assert_not_called()
-
-    @patch("agent.utils.keybindings.handlers.shell_command.execute_shell_command")
-    @patch("agent.utils.keybindings.handlers.shell_command.console")
-    def test_handle_with_just_exclamation(self, mock_console, mock_execute):
-        """Test that handle() does nothing with just '!'."""
+    def test_handle_with_just_exclamation_shows_message(self, mock_console, mock_execute):
+        """Test that handle() shows message when buffer has just !"""
         handler = ShellCommandHandler()
 
         # Create mock event with just !
         mock_buffer = MagicMock()
         mock_buffer.text = "!"
-        mock_buffer.insert_text = MagicMock()
         mock_app = MagicMock()
         mock_app.current_buffer = mock_buffer
         mock_event = MagicMock()
@@ -166,7 +146,33 @@ class TestShellCommandHandler:
         # Call handle
         handler.handle(mock_event)
 
-        # Verify nothing happened
+        # Verify buffer was cleared
+        assert mock_buffer.text == ""
+
+        # Verify message was shown
+        assert mock_console.print.called
+
+        # Verify command was not executed
+        mock_execute.assert_not_called()
+
+    @patch("agent.utils.keybindings.handlers.shell_command.execute_shell_command")
+    @patch("agent.utils.keybindings.handlers.shell_command.console")
+    def test_handle_with_non_shell_text_does_nothing(self, mock_console, mock_execute):
+        """Test that handle() does nothing when buffer doesn't start with !"""
+        handler = ShellCommandHandler()
+
+        # Create mock event with non-shell text
+        mock_buffer = MagicMock()
+        mock_buffer.text = "create a cluster"
+        mock_app = MagicMock()
+        mock_app.current_buffer = mock_buffer
+        mock_event = MagicMock()
+        mock_event.app = mock_app
+
+        # Call handle
+        handler.handle(mock_event)
+
+        # Verify command was not executed
         mock_execute.assert_not_called()
 
     @patch("agent.utils.keybindings.handlers.shell_command.execute_shell_command")

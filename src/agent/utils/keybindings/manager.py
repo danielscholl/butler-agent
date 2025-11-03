@@ -94,8 +94,12 @@ class KeybindingManager:
             trigger_display = handler.trigger_key.upper()
             if handler.trigger_key == "escape":
                 trigger_display = "ESC"
-            elif handler.trigger_key == "!":
-                trigger_display = "!"
+            elif handler.trigger_key == "enter":
+                # Special case for ShellCommandHandler - show the actual usage
+                if "shell" in handler.description.lower() or "!" in handler.description:
+                    trigger_display = "!<cmd>"
+                else:
+                    trigger_display = "ENTER"
 
             help_lines.append(f"  {trigger_display:10} - {handler.description}")
 
@@ -116,6 +120,11 @@ class KeybindingManager:
             def make_handler(h: KeybindingHandler) -> Any:
                 def _handler(event: Any) -> None:
                     try:
+                        # Check if handler has conditional logic
+                        if hasattr(h, "should_handle") and not h.should_handle(event):
+                            # Handler doesn't want to process this event, skip it
+                            return
+
                         h.handle(event)
                     except Exception as e:
                         logger.error(f"Error in keybinding handler {h.__class__.__name__}: {e}")
