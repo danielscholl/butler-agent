@@ -97,7 +97,7 @@ class KubectlManager:
                 )
         except subprocess.TimeoutExpired as e:
             raise ClusterNotFoundError(
-                f"Timeout connecting to cluster '{cluster_name}'. " f"The cluster may be stopped."
+                f"Timeout connecting to cluster '{cluster_name}'. The cluster may be stopped."
             ) from e
 
         return kubeconfig_path
