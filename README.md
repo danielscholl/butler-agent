@@ -43,6 +43,12 @@ butler -p "start dev"
 - **Preference learning**: Remembers your patterns
 - **Conversation history**: Save and resume sessions
 
+### ⌨️ Keyboard Shortcuts
+- **Shell commands**: Execute system commands with `!` (e.g., `!docker ps`, `!kubectl get pods`)
+- **Quick clear**: Press `ESC` to clear the prompt
+- **Mixed workflows**: Combine AI conversations with direct shell access
+- **No context switching**: Stay in Butler while checking system state
+
 ## Prerequisites
 
 ### Azure Resources (Cloud)
@@ -110,7 +116,17 @@ butler --check
 butler --help
 ```
 
-**See [USAGE.md](USAGE.md) for comprehensive examples and advanced features.**
+### Interactive Mode Features
+
+In interactive mode, you can:
+
+- **Ask questions**: "what clusters do I have?"
+- **Manage clusters**: "create a cluster called dev"
+- **Execute shell commands**: `!docker ps`, `!kubectl get nodes`, `!ls -la`
+- **Clear prompt**: Press `ESC` to clear current input
+- **Save conversations**: `/save my-session` and `/load my-session`
+
+**See [USAGE.md](USAGE.md) for comprehensive examples and [docs/keybindings.md](docs/keybindings.md) for keyboard shortcuts.**
 
 ## Configuration
 

@@ -1,4 +1,0 @@
-# This directory contains custom KinD cluster configurations
-# Place your custom configurations here (they will be gitignored):
-# - kind-config.yaml (default custom config)
-# - kind-{name}.yaml (named configs, e.g., kind-dev.yaml, kind-prod.yaml)
