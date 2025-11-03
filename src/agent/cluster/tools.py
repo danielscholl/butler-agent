@@ -118,10 +118,10 @@ def create_cluster(
 
                 result["kubeconfig_path"] = str(kubeconfig_path)
                 logger.info(f"Kubeconfig saved to {kubeconfig_path}")
-            except Exception as e:
+            except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
                 logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
                 # Don't fail cluster creation if kubeconfig save fails
-                result["kubeconfig_path"] = "not_saved"
+                result["kubeconfig_path"] = None
 
         result["config_source"] = config_source
         result["message"] = (
