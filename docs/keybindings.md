@@ -188,6 +188,100 @@ command not found: nonexistent-command
 Exit code: 127
 ```
 
+## Session Management
+
+### Auto-Save on Exit
+
+Butler automatically saves your session whenever you exit, so you never lose work:
+
+```bash
+> create a cluster called dev
+> get status of dev
+> quit
+✓ Session auto-saved
+Run 'butler --continue' to resume.
+```
+
+Sessions are saved in `~/.butler/conversations/` with automatic timestamps.
+
+### Resume Last Session
+
+Resume where you left off with the `--continue` flag:
+
+```bash
+$ butler --continue
+✓ Resumed session 'auto-2025-01-03-14-30' (8 messages)
+
+> # Continue your work
+> delete cluster dev
+```
+
+### Switch Sessions
+
+Use `/continue` in interactive mode to pick from all saved sessions:
+
+```bash
+> /continue
+
+Available Sessions:
+  1. auto-2025-01-03-14-30 (5m ago) "create a cluster called dev..."
+  2. auto-2025-01-03-13-15 (2h ago) "kubectl get pods in staging..."
+  3. auto-2025-01-02-16-45 (1d ago) "deploy nginx to production..."
+
+Select session [1-3]: 2
+✓ Loaded 'auto-2025-01-03-13-15' (12 messages)
+
+> # Now working in the selected session
+```
+
+### Clean Up Old Sessions
+
+Use `/purge` to delete all saved sessions:
+
+```bash
+> /purge
+⚠ This will delete ALL 15 saved sessions. Continue? (y/n): y
+✓ Deleted 15 sessions
+```
+
+### Session Workflow Examples
+
+**Multi-day projects:**
+```bash
+# Day 1
+$ butler
+> create and configure dev cluster
+> quit
+✓ Session auto-saved
+
+# Day 2
+$ butler --continue
+> # Continue from yesterday
+> deploy application to dev
+```
+
+**Context switching:**
+```bash
+> working on feature A
+> /continue        # Switch to different context
+  1. auto-...  "feature A work..."
+  2. auto-...  "hotfix for production..."
+Select: 2
+> # Work on hotfix
+> quit
+
+$ butler --continue   # Returns to hotfix (most recent)
+```
+
+**Quick shell access:**
+```bash
+> create cluster test
+> !kubectl get pods --context kind-test
+> analyze the output
+> quit
+✓ Session auto-saved
+```
+
 ## Safety and Limitations
 
 ### Security

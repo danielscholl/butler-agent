@@ -33,6 +33,78 @@ from agent.utils.terminal import clear_screen
 console = Console()
 
 
+def _save_last_session(session_name: str) -> None:
+    """Save the last session name for --continue.
+
+    Args:
+        session_name: Name of the session to track
+    """
+    try:
+        last_session_file = Path.home() / ".butler" / "last_session"
+        last_session_file.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(last_session_file, "w") as f:
+            f.write(session_name)
+
+        logging.debug(f"Saved last session: {session_name}")
+
+    except Exception as e:
+        logging.warning(f"Failed to save last session marker: {e}")
+        # Non-fatal, continue anyway
+
+
+def _get_last_session() -> str | None:
+    """Get the last session name for --continue.
+
+    Returns:
+        Last session name or None if not found
+    """
+    try:
+        last_session_file = Path.home() / ".butler" / "last_session"
+        if last_session_file.exists():
+            with open(last_session_file) as f:
+                return f.read().strip()
+    except Exception as e:
+        logging.warning(f"Failed to read last session marker: {e}")
+
+    return None
+
+
+async def _auto_save_session(
+    persistence: Any, thread: Any, message_count: int, quiet: bool = False
+) -> None:
+    """Auto-save the current session on exit.
+
+    Args:
+        persistence: ThreadPersistence instance
+        thread: Current conversation thread
+        message_count: Number of messages in thread
+        quiet: Whether to suppress output
+    """
+    # Only save if there are messages
+    if message_count == 0:
+        return
+
+    try:
+        from datetime import datetime
+
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
+        session_name = f"auto-{timestamp}"
+
+        await persistence.save_thread(thread, session_name)
+        _save_last_session(session_name)
+
+        if not quiet:
+            console.print("\n[green]✓ Session auto-saved[/green]")
+            console.print("[dim]Run 'butler --continue' to resume.[/dim]\n")
+
+        logging.info(f"Auto-saved session: {session_name}")
+
+    except Exception as e:
+        logging.error(f"Failed to auto-save session: {e}")
+        # Non-fatal, just log it
+
+
 def setup_logging(log_level: str = "info") -> None:
     """Setup logging with Rich handler.
 
@@ -97,6 +169,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         action="store_true",
         help="Show current configuration",
+    )
+
+    parser.add_argument(
+        "--continue",
+        dest="continue_session",
+        action="store_true",
+        help="Resume last saved session",
     )
 
     parser.add_argument(
@@ -226,12 +305,15 @@ def _render_completion_status(elapsed: float, message_count: int, tool_count: in
     )
 
 
-async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
+async def run_chat_mode(
+    quiet: bool = False, verbose: bool = False, resume_session: str | None = None
+) -> None:
     """Run interactive chat mode.
 
     Args:
         quiet: Minimal output mode
         verbose: Verbose output mode
+        resume_session: Optional session name to resume
     """
     try:
         # Load configuration
@@ -258,12 +340,36 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
             console.print(f"[red]Failed to initialize agent: {e}[/red]")
             sys.exit(1)
 
-        # Create conversation thread for multi-turn conversations
-        thread = agent.get_new_thread()
-        message_count = 0
-
         # Initialize persistence manager
         persistence = ThreadPersistence()
+
+        # Create or resume conversation thread
+        if resume_session:
+            try:
+                thread = await persistence.load_thread(agent, resume_session)
+                message_count = len(thread.messages) if hasattr(thread, "messages") else 0
+                if not quiet:
+                    console.print(
+                        f"\n[green]✓ Resumed session '{resume_session}' "
+                        f"({message_count} messages)[/green]\n"
+                    )
+            except FileNotFoundError:
+                console.print(
+                    f"[yellow]Session '{resume_session}' not found. Starting new session.[/yellow]\n"
+                )
+                thread = agent.get_new_thread()
+                message_count = 0
+            except Exception as e:
+                console.print(
+                    f"[yellow]Failed to resume session: {e}. Starting new session.[/yellow]\n"
+                )
+                if verbose:
+                    console.print_exception()
+                thread = agent.get_new_thread()
+                message_count = 0
+        else:
+            thread = agent.get_new_thread()
+            message_count = 0
 
         # Setup keybinding manager with handlers
         keybinding_manager = KeybindingManager()
@@ -291,6 +397,8 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
                 cmd = user_input.strip().lower()
 
                 if cmd in ["exit", "quit", "q"]:
+                    # Auto-save session before exit
+                    await _auto_save_session(persistence, thread, message_count, quiet)
                     console.print("[dim]Goodbye! 👋[/dim]")
                     break
 
@@ -315,80 +423,92 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
 
                     continue
 
-                # Handle /save command to save conversation
-                if user_input.startswith("/save"):
-                    parts = user_input.split(maxsplit=1)
-                    if len(parts) < 2:
-                        console.print("[red]Usage: /save <name>[/red]")
-                        continue
-
-                    name = parts[1].strip()
-                    try:
-                        await persistence.save_thread(thread, name)
-                        console.print(f"[green]✓ Conversation saved as '{name}'[/green]\n")
-                    except Exception as e:
-                        console.print(f"[red]Failed to save conversation: {e}[/red]\n")
-                        if verbose:
-                            console.print_exception()
-                    continue
-
-                # Handle /load command to load conversation
-                if user_input.startswith("/load"):
-                    parts = user_input.split(maxsplit=1)
-                    if len(parts) < 2:
-                        console.print("[red]Usage: /load <name>[/red]")
-                        continue
-
-                    name = parts[1].strip()
-                    try:
-                        thread = await persistence.load_thread(agent, name)
-                        # Try to get message count from thread if possible
-                        message_count = len(thread.messages) if hasattr(thread, "messages") else 0
-                        console.print(
-                            f"[green]✓ Conversation '{name}' loaded "
-                            f"({message_count} messages)[/green]\n"
-                        )
-                    except FileNotFoundError:
-                        console.print(f"[red]Conversation '{name}' not found[/red]\n")
-                    except Exception as e:
-                        console.print(f"[red]Failed to load conversation: {e}[/red]\n")
-                        if verbose:
-                            console.print_exception()
-                    continue
-
-                # Handle /list command to list saved conversations
-                if cmd == "/list":
+                # Handle /continue command to switch sessions
+                if cmd == "/continue":
                     conversations = persistence.list_conversations()
-                    if conversations:
-                        console.print("\n[bold]Saved Conversations:[/bold]")
-                        for conv in conversations:
-                            desc = conv.get("description") or "[dim]No description[/dim]"
-                            created = conv.get("created_at", "")[:10]  # Just date
-                            console.print(f"  • [cyan]{conv['name']}[/cyan] ({created})")
-                            if conv.get("description"):
-                                console.print(f"    {desc}")
-                    else:
-                        console.print("[dim]No saved conversations[/dim]")
-                    console.print()
-                    continue
-
-                # Handle /delete command to delete saved conversation
-                if user_input.startswith("/delete"):
-                    parts = user_input.split(maxsplit=1)
-                    if len(parts) < 2:
-                        console.print("[red]Usage: /delete <name>[/red]")
+                    if not conversations:
+                        console.print("\n[yellow]No saved sessions available[/yellow]\n")
                         continue
 
-                    name = parts[1].strip()
+                    # Show session picker
+                    console.print("\n[bold]Available Sessions:[/bold]")
+                    for i, conv in enumerate(conversations, 1):
+                        created = conv.get("created_at", "")
+                        # Calculate time ago
+                        try:
+                            from datetime import datetime
+
+                            created_dt = datetime.fromisoformat(created)
+                            now = datetime.now()
+                            delta = now - created_dt
+                            if delta.days > 0:
+                                time_ago = f"{delta.days}d ago"
+                            elif delta.seconds > 3600:
+                                time_ago = f"{delta.seconds // 3600}h ago"
+                            else:
+                                time_ago = f"{delta.seconds // 60}m ago"
+                        except Exception:
+                            time_ago = "unknown"
+
+                        # Get first message preview
+                        first_msg = conv.get("first_message", "")
+                        if len(first_msg) > 50:
+                            first_msg = first_msg[:47] + "..."
+
+                        console.print(
+                            f"  {i}. [cyan]{conv['name']}[/cyan] "
+                            f'[dim]({time_ago})[/dim] "{first_msg}"'
+                        )
+
+                    # Get user selection
                     try:
-                        if persistence.delete_conversation(name):
-                            console.print(f"[green]✓ Conversation '{name}' deleted[/green]\n")
+                        choice = await session.prompt_async(
+                            f"\nSelect session [1-{len(conversations)}]: "
+                        )
+                        choice_num = int(choice.strip())
+                        if 1 <= choice_num <= len(conversations):
+                            selected = conversations[choice_num - 1]
+                            thread = await persistence.load_thread(agent, selected["name"])
+                            message_count = (
+                                len(thread.messages) if hasattr(thread, "messages") else 0
+                            )
+                            console.print(
+                                f"\n[green]✓ Loaded '{selected['name']}' "
+                                f"({message_count} messages)[/green]\n"
+                            )
                         else:
-                            console.print(f"[red]Conversation '{name}' not found[/red]\n")
-                    except Exception as e:
-                        console.print(f"[red]Failed to delete conversation: {e}[/red]\n")
-                        if verbose:
-                            console.print_exception()
+                            console.print("[red]Invalid selection[/red]\n")
+                    except (ValueError, EOFError, KeyboardInterrupt):
+                        console.print("\n[yellow]Cancelled[/yellow]\n")
+                    continue
+
+                # Handle /purge command to delete all sessions
+                if cmd == "/purge":
+                    conversations = persistence.list_conversations()
+                    if not conversations:
+                        console.print("\n[yellow]No sessions to purge[/yellow]\n")
+                        continue
+
+                    # Confirm deletion
+                    console.print(
+                        f"\n[yellow]⚠ This will delete ALL {len(conversations)} saved sessions.[/yellow]"
+                    )
+                    try:
+                        confirm = await session.prompt_async("Continue? (y/n): ")
+                        if confirm.strip().lower() == "y":
+                            deleted = 0
+                            for conv in conversations:
+                                try:
+                                    if persistence.delete_conversation(conv["name"]):
+                                        deleted += 1
+                                except Exception as e:
+                                    logging.warning(f"Failed to delete {conv['name']}: {e}")
+
+                            console.print(f"\n[green]✓ Deleted {deleted} sessions[/green]\n")
+                        else:
+                            console.print("\n[yellow]Cancelled[/yellow]\n")
+                    except (EOFError, KeyboardInterrupt):
+                        console.print("\n[yellow]Cancelled[/yellow]\n")
                     continue
 
                 # Execute query with conversation thread
@@ -422,6 +542,8 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
                 continue
 
             except EOFError:
+                # Auto-save session before exit (Ctrl+D)
+                await _auto_save_session(persistence, thread, message_count, quiet)
                 console.print("\n[dim]Goodbye! 👋[/dim]")
                 break
 
@@ -517,6 +639,7 @@ def _show_help() -> None:
 ## CLI Commands
 
 - `butler` - Start interactive chat mode
+- `butler --continue` - Resume last saved session
 - `butler --check` - Run health check for dependencies and configuration
 - `butler --config` - Show current configuration
 - `butler -p "query"` - Execute single query and exit
@@ -525,13 +648,11 @@ def _show_help() -> None:
 
 ## Interactive Commands
 
-- **exit, quit, q** - Exit Butler
+- **exit, quit, q** - Exit Butler (auto-saves session)
 - **help, ?** - Show this help
 - **/clear** - Clear screen and reset conversation context
-- **/save <name>** - Save current conversation
-- **/load <name>** - Load a saved conversation
-- **/list** - List all saved conversations
-- **/delete <name>** - Delete a saved conversation
+- **/continue** - Switch to a different session (shows picker)
+- **/purge** - Delete all saved sessions
 
 ## Keyboard Shortcuts
 
@@ -562,13 +683,32 @@ Verify dependencies and configuration:
 butler --check
 ```
 
-## Conversation Management
+## Session Management
 
-Save your work and resume later:
+Sessions are auto-saved when you exit Butler:
 ```
-/save my-dev-setup
-/list
-/load my-dev-setup
+> quit
+✓ Session auto-saved
+Run 'butler --continue' to resume.
+```
+
+Resume your last session:
+```bash
+butler --continue
+```
+
+Switch between sessions in interactive mode:
+```
+> /continue
+  1. auto-2025-01-03-14-30 (5m ago) "create a cluster..."
+  2. auto-2025-01-03-13-15 (2h ago) "kubectl get pods..."
+Select session [1-2]: 1
+```
+
+Clean up old sessions:
+```
+> /purge
+⚠ This will delete ALL 15 saved sessions. Continue? (y/n): y
 ```
 
 ## Tips
@@ -769,8 +909,15 @@ async def async_main() -> None:
     if args.prompt:
         await run_single_query(args.prompt, quiet=args.quiet, verbose=args.verbose)
     else:
+        # Handle --continue flag
+        resume_session = None
+        if args.continue_session:
+            resume_session = _get_last_session()
+            if not resume_session:
+                console.print("[yellow]No previous session found. Starting new session.[/yellow]\n")
+
         # Interactive chat mode
-        await run_chat_mode(quiet=args.quiet, verbose=args.verbose)
+        await run_chat_mode(quiet=args.quiet, verbose=args.verbose, resume_session=resume_session)
 
 
 def main() -> None:

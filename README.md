@@ -124,7 +124,8 @@ In interactive mode, you can:
 - **Manage clusters**: "create a cluster called dev"
 - **Execute shell commands**: `!docker ps`, `!kubectl get nodes`, `!ls -la`
 - **Clear prompt**: Press `ESC` to clear current input
-- **Save conversations**: `/save my-session` and `/load my-session`
+- **Auto-saved sessions**: Exit and resume anytime with `butler --continue`
+- **Switch sessions**: Use `/continue` to pick from saved sessions
 
 **See [USAGE.md](USAGE.md) for comprehensive examples and [docs/keybindings.md](docs/keybindings.md) for keyboard shortcuts.**
 
