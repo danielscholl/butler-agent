@@ -384,7 +384,7 @@ class KubectlManager:
             )
 
         logs = result.stdout
-        log_lines = logs.split("\n") if logs else []
+        log_lines = logs.split("\n") if logs.strip() else []
 
         logger.info(
             f"Retrieved {len(log_lines)} lines of logs from pod '{pod_name}' "
