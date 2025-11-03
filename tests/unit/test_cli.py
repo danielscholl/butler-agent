@@ -3,6 +3,8 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.keys import Keys
 
 from agent.cli import build_parser, run_single_query
 
@@ -188,16 +190,10 @@ class TestInteractiveMode:
 
         # Verify that key_bindings is a KeyBindings object
         assert key_bindings is not None
-        from prompt_toolkit.key_binding import KeyBindings
-
         assert isinstance(key_bindings, KeyBindings)
 
     def test_esc_key_clears_buffer(self):
         """Test that ESC key binding clears the buffer text."""
-        from unittest.mock import MagicMock
-
-        from prompt_toolkit.keys import Keys
-
         from agent.cli import _create_key_bindings
 
         # Create key bindings
