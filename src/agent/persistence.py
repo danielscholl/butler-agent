@@ -169,6 +169,13 @@ class ThreadPersistence:
         """
         messages_data = []
 
+        # Debug: Check what attributes the thread has
+        logger.debug(f"Thread type: {type(thread)}")
+        logger.debug(f"Thread attributes: {dir(thread)}")
+        logger.debug(f"Has messages: {hasattr(thread, 'messages')}")
+        if hasattr(thread, "messages"):
+            logger.debug(f"Messages count: {len(thread.messages) if thread.messages else 0}")
+
         if hasattr(thread, "messages") and thread.messages:
             for msg in thread.messages:
                 msg_dict = {"role": getattr(msg, "role", "unknown")}
