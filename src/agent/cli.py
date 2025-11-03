@@ -13,6 +13,7 @@ from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.history import FileHistory
+from prompt_toolkit.key_binding import KeyBindings
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.markdown import Markdown
@@ -178,6 +179,22 @@ def _render_prompt_area() -> str:
     return "> "
 
 
+def _create_key_bindings() -> KeyBindings:
+    """Create key bindings for the interactive prompt.
+
+    Returns:
+        KeyBindings object with custom key bindings
+    """
+    kb = KeyBindings()
+
+    @kb.add("escape")
+    def _(event):
+        """Clear the prompt text when ESC is pressed."""
+        event.app.current_buffer.text = ""
+
+    return kb
+
+
 def _count_tool_calls(thread: Any) -> int:
     """Count tool calls in the thread.
 
@@ -260,9 +277,12 @@ async def run_chat_mode(quiet: bool = False, verbose: bool = False) -> None:
         # Initialize persistence manager
         persistence = ThreadPersistence()
 
-        # Setup prompt session with history
+        # Setup prompt session with history and key bindings
         history_file = Path.home() / ".butler_history"
-        session: PromptSession = PromptSession(history=FileHistory(str(history_file)))
+        key_bindings = _create_key_bindings()
+        session: PromptSession = PromptSession(
+            history=FileHistory(str(history_file)), key_bindings=key_bindings
+        )
 
         # Interactive loop
         while True:
@@ -514,6 +534,7 @@ def _show_help() -> None:
 
 - **exit, quit, q** - Exit Butler
 - **help, ?** - Show this help
+- **ESC** - Clear the current prompt text
 - **/clear** - Clear screen and reset conversation context
 - **/save <name>** - Save current conversation
 - **/load <name>** - Load a saved conversation
