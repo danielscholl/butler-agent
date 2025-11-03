@@ -210,11 +210,39 @@ Resume where you left off with the `--continue` flag:
 
 ```bash
 $ butler --continue
-✓ Resumed session 'auto-2025-01-03-14-30' (8 messages)
 
-> # Continue your work
+Previous Session History:
+(2 messages)
+
+You: create a cluster called dev
+Butler: I'll create a cluster for you...
+  [Called: create_cluster]
+
+You: show status
+Butler: Here's the cluster status...
+
+⚠ Starting fresh context - AI won't remember the above conversation.
+You can see what happened, but you'll need to provide context if needed.
+
+Restoring context to AI...
+☸ Complete (2.3s)
+✓ Context restored
+
+> # AI now understands: dev cluster was created, can continue naturally
 > delete cluster dev
 ```
+
+**How Context Restoration Works:**
+
+1. **You see**: Full conversation history displayed
+2. **AI receives**: Smart summary with:
+   - User requests made
+   - Clusters mentioned
+   - Tools called
+   - Key actions taken
+3. **Result**: AI understands the context and can continue helping
+
+The AI won't have the exact conversation in memory, but it will know what you were working on and can provide relevant help.
 
 ### Switch Sessions
 
