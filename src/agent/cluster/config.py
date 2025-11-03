@@ -1,5 +1,6 @@
 """KinD cluster configuration templates and management."""
 
+import threading
 from pathlib import Path
 from typing import Any, Callable, Union
 
@@ -7,6 +8,9 @@ import yaml
 
 # Template directory containing built-in KinD configurations
 _TEMPLATE_DIR = Path(__file__).parent / "templates"
+
+# Lock for thread-safe template caching
+_template_lock = threading.Lock()
 
 
 def _load_builtin_template(template_name: str) -> str:
@@ -47,6 +51,9 @@ TEMPLATES: dict[str, Union[str, Callable[[], str]]] = {
 def _get_template(template_name: str) -> str:
     """Get a template by name, loading it if necessary.
 
+    Thread-safe lazy loading with caching. Uses a lock to prevent race conditions
+    when multiple threads access the same template simultaneously.
+
     Args:
         template_name: Name of the template
 
@@ -64,10 +71,17 @@ def _get_template(template_name: str) -> str:
     template = TEMPLATES[template_name]
     # If it's a lambda function, call it to load the template
     if callable(template):
-        # Cache the loaded template
-        template_content = template()
-        TEMPLATES[template_name] = template_content
-        return template_content
+        # Use lock to prevent race condition in multi-threaded environments
+        with _template_lock:
+            # Double-check after acquiring lock (another thread might have loaded it)
+            template = TEMPLATES[template_name]
+            if callable(template):
+                # Cache the loaded template
+                template_content = template()
+                TEMPLATES[template_name] = template_content
+                return template_content
+            # Already loaded by another thread
+            return template
     # Already loaded and cached
     return template
 
