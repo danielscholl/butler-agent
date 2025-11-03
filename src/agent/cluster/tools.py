@@ -564,7 +564,7 @@ def kubectl_get_resources(
 
     try:
         logger.info(
-            f"Getting {resource_type} from cluster '{cluster_name}', " f"namespace '{namespace}'"
+            f"Getting {resource_type} from cluster '{cluster_name}', namespace '{namespace}'"
         )
 
         result = _kubectl_manager.get_resources(
