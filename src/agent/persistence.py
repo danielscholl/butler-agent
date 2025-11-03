@@ -96,6 +96,66 @@ class ThreadPersistence:
             logger.error(f"Failed to save metadata: {e}")
             raise
 
+    def _generate_context_summary(self, messages: list[dict]) -> str:
+        """Generate a concise context summary from message history.
+
+        Args:
+            messages: List of message dicts with role and content
+
+        Returns:
+            Context summary string for AI
+        """
+        if not messages:
+            return "Empty session - no previous context."
+
+        summary_parts = ["You are resuming a previous Butler session. Here's what happened:\n"]
+
+        # Track key information
+        clusters_mentioned = set()
+        tools_called = []
+        user_requests = []
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "user":
+                user_requests.append(content[:200])  # Truncate long messages
+
+                # Extract cluster names mentioned
+                import re
+
+                cluster_matches = re.findall(
+                    r"cluster[s]?\s+(?:called|named)?\s+['\"]?([a-z0-9-]+)", content, re.IGNORECASE
+                )
+                clusters_mentioned.update(cluster_matches)
+
+            # Track tool calls
+            if "tool_calls" in msg:
+                for tc in msg["tool_calls"]:
+                    tools_called.append(tc.get("name", "unknown"))
+
+        # Build summary
+        if user_requests:
+            summary_parts.append("User requests:")
+            for i, req in enumerate(user_requests[:5], 1):  # Max 5
+                summary_parts.append(f"{i}. {req}")
+            summary_parts.append("")
+
+        if clusters_mentioned:
+            summary_parts.append(f"Clusters mentioned: {', '.join(clusters_mentioned)}")
+
+        if tools_called:
+            summary_parts.append(f"Tools used: {', '.join(set(tools_called))}")
+
+        summary_parts.append(f"\nTotal conversation: {len(messages)} messages exchanged.")
+        summary_parts.append(
+            "\nPlease continue helping the user based on this context. "
+            "If the user asks about previous actions, you can reference the above."
+        )
+
+        return "\n".join(summary_parts)
+
     def _fallback_serialize(self, thread: Any) -> dict:
         """Fallback serialization when thread.serialize() fails.
 
@@ -236,7 +296,7 @@ class ThreadPersistence:
             logger.error(f"Failed to save conversation: {e}")
             raise
 
-    async def load_thread(self, agent: Any, name: str) -> Any:
+    async def load_thread(self, agent: Any, name: str) -> tuple[Any, str | None]:
         """Load a conversation thread.
 
         Args:
@@ -244,7 +304,9 @@ class ThreadPersistence:
             name: Name of conversation to load
 
         Returns:
-            Deserialized AgentThread
+            Tuple of (thread, context_summary)
+            - thread: Deserialized AgentThread
+            - context_summary: Optional context summary for AI (for fallback sessions)
 
         Raises:
             ValueError: If name is invalid or unsafe
@@ -272,15 +334,58 @@ class ThreadPersistence:
                     f"Session '{safe_name}' was saved with fallback serialization. "
                     "Full context restoration not supported yet."
                 )
-                # Create a new thread instead of trying to deserialize
-                # User will see the conversation was loaded but context will be fresh
+
+                # Display the conversation history to the user
+                from rich.console import Console
+                from rich.markdown import Markdown
+
+                console = Console()
+                messages = thread_data.get("messages", [])
+
+                if messages:
+                    console.print("\n[bold cyan]Previous Session History:[/bold cyan]")
+                    console.print(f"[dim]({len(messages)} messages)[/dim]\n")
+
+                    for msg in messages:
+                        role = msg.get("role", "unknown")
+                        content = msg.get("content", "")
+
+                        if role == "user":
+                            console.print(f"[bold green]You:[/bold green] {content}")
+                        elif role == "assistant":
+                            console.print("[bold cyan]Butler:[/bold cyan]")
+                            console.print(Markdown(content))
+
+                        # Show tool calls if present
+                        if "tool_calls" in msg:
+                            console.print(f"[dim]  Tools used: {len(msg['tool_calls'])}[/dim]")
+
+                        console.print()
+
+                    console.print(
+                        "[yellow]⚠ Starting fresh context - AI won't remember the above conversation.[/yellow]"
+                    )
+                    console.print(
+                        "[dim]You can see what happened, but you'll need to provide context if needed.[/dim]\n"
+                    )
+
+                # Generate context summary for AI
+                context_summary = self._generate_context_summary(messages)
+
+                # Create a new thread
                 thread = agent.get_new_thread()
+
+                logger.info(
+                    f"Conversation '{safe_name}' loaded with fallback (context summary generated)"
+                )
+                return thread, context_summary
             else:
                 # Deserialize thread using agent framework
                 thread = await agent.agent.deserialize_thread(thread_data)
 
-            logger.info(f"Conversation '{safe_name}' loaded successfully")
-            return thread
+                logger.info(f"Conversation '{safe_name}' loaded successfully")
+                # No context summary needed - thread has full context
+                return thread, None
 
         except Exception as e:
             logger.error(f"Failed to load conversation: {e}")

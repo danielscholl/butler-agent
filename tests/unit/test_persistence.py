@@ -97,11 +97,13 @@ class TestThreadPersistence:
         await persistence.save_thread(mock_thread, name)
 
         # Then load it
-        loaded_thread = await persistence.load_thread(mock_agent, name)
+        loaded_thread, context_summary = await persistence.load_thread(mock_agent, name)
 
         # Verify deserialization was called
         mock_agent.agent.deserialize_thread.assert_called_once()
         assert loaded_thread is not None
+        # No context summary for non-fallback sessions
+        assert context_summary is None
 
     @pytest.mark.asyncio
     async def test_load_nonexistent_thread(self, persistence, mock_agent):

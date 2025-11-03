@@ -345,13 +345,27 @@ async def run_chat_mode(
         # Create or resume conversation thread
         if resume_session:
             try:
-                thread = await persistence.load_thread(agent, resume_session)
+                thread, context_summary = await persistence.load_thread(agent, resume_session)
                 message_count = len(thread.messages) if hasattr(thread, "messages") else 0
-                if not quiet:
+
+                # If we have a context summary, restore AI context
+                if context_summary:
+                    if not quiet:
+                        console.print("\n[cyan]Restoring context to AI...[/cyan]")
+
+                    with console.status("[bold blue]Loading context...", spinner="dots"):
+                        # Send context summary to AI to restore understanding
+                        await agent.run(context_summary, thread=thread)
+                        message_count += 1
+
+                    if not quiet:
+                        console.print("[green]✓ Context restored[/green]\n")
+                elif not quiet:
                     console.print(
                         f"\n[green]✓ Resumed session '{resume_session}' "
                         f"({message_count} messages)[/green]\n"
                     )
+
             except FileNotFoundError:
                 console.print(
                     f"[yellow]Session '{resume_session}' not found. Starting new session.[/yellow]\n"
@@ -504,14 +518,30 @@ async def run_chat_mode(
                         choice_num = int(choice.strip())
                         if 1 <= choice_num <= len(conversations):
                             selected = conversations[choice_num - 1]
-                            thread = await persistence.load_thread(agent, selected["name"])
+                            thread, context_summary = await persistence.load_thread(
+                                agent, selected["name"]
+                            )
                             message_count = (
                                 len(thread.messages) if hasattr(thread, "messages") else 0
                             )
-                            console.print(
-                                f"\n[green]✓ Loaded '{selected['name']}' "
-                                f"({message_count} messages)[/green]\n"
-                            )
+
+                            # If we have a context summary, restore AI context
+                            if context_summary:
+                                console.print("\n[cyan]Restoring context to AI...[/cyan]")
+
+                                with console.status(
+                                    "[bold blue]Loading context...", spinner="dots"
+                                ):
+                                    # Send context summary to AI to restore understanding
+                                    await agent.run(context_summary, thread=thread)
+                                    message_count += 1
+
+                                console.print("[green]✓ Context restored[/green]\n")
+                            else:
+                                console.print(
+                                    f"\n[green]✓ Loaded '{selected['name']}' "
+                                    f"({message_count} messages)[/green]\n"
+                                )
                         else:
                             console.print("[red]Invalid selection[/red]\n")
                     except (ValueError, EOFError, KeyboardInterrupt):
