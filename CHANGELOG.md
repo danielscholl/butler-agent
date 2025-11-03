@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.4...butler-agent-v0.1.5) (2025-11-03)
+
+
+### Features
+
+* **cli:** implement extensible keybinding system with shell command execution ([#19](https://github.com/danielscholl/butler-agent/issues/19)) ([8fb907a](https://github.com/danielscholl/butler-agent/commit/8fb907aa30ce760b8264359a0403f1ab5c903fe2))
+
 ## [0.1.4](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.3...butler-agent-v0.1.4) (2025-11-03)
 
 
