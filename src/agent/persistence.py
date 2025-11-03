@@ -184,7 +184,9 @@ class ThreadPersistence:
 
         if messages:
             for msg in messages:
-                msg_dict = {"role": getattr(msg, "role", "unknown")}
+                # Extract role (might be a Role enum object, convert to string)
+                role = getattr(msg, "role", "unknown")
+                msg_dict = {"role": str(role) if role else "unknown"}
 
                 # Extract message content
                 if hasattr(msg, "text"):
@@ -204,13 +206,14 @@ class ThreadPersistence:
 
                 # Extract tool calls if present
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
-                    msg_dict["tool_calls"] = [
-                        {
-                            "name": getattr(tc, "name", "unknown"),
+                    tool_calls_data = []
+                    for tc in msg.tool_calls:
+                        tool_call = {
+                            "name": str(getattr(tc, "name", "unknown")),
                             "arguments": str(getattr(tc, "arguments", "")),
                         }
-                        for tc in msg.tool_calls
-                    ]
+                        tool_calls_data.append(tool_call)
+                    msg_dict["tool_calls"] = tool_calls_data
 
                 messages_data.append(msg_dict)
 
