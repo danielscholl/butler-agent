@@ -419,10 +419,8 @@ class ThreadPersistence:
                         console.print()
 
                     console.print(
-                        "[yellow]⚠ Starting fresh context - AI won't remember the above conversation.[/yellow]"
-                    )
-                    console.print(
-                        "[dim]You can see what happened, but you'll need to provide context if needed.[/dim]\n"
+                        "[cyan]ℹ️  Session restored from history. "
+                        "Context summary will be sent to AI.[/cyan]\n"
                     )
 
                 # Generate context summary for AI
