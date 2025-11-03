@@ -6,9 +6,8 @@ Comprehensive guide for using Butler Agent to manage Kubernetes in Docker (KinD)
 
 - [Getting Started](#getting-started)
 - [Cluster Lifecycle Operations](#cluster-lifecycle-operations)
+- [Kubernetes Resource Management](#kubernetes-resource-management)
 - [Custom Cluster Configurations](#custom-cluster-configurations)
-- [Interactive Mode](#interactive-mode)
-- [Single Query Mode](#single-query-mode)
 - [Examples](#examples)
 
 ## Getting Started
@@ -143,6 +142,84 @@ Get detailed cluster information:
 butler -p "status of dev cluster"
 butler -p "check health of dev"
 butler -p "how is dev doing?"
+```
+
+## Kubernetes Resource Management
+
+Once your cluster is running, Butler can manage Kubernetes resources using natural language.
+
+### View Resources
+
+```bash
+# See what's running
+butler -p "show me all pods in dev"
+butler -p "get services in staging"
+butler -p "list deployments in kube-system namespace on prod"
+
+# Filter by labels
+butler -p "show pods with label app=nginx in dev"
+```
+
+### Deploy Applications
+
+```bash
+# Apply a manifest
+butler -p "apply this deployment to dev: <paste YAML>"
+
+# Example deployment
+butler -p "apply this to dev:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+"
+```
+
+### Debug Applications
+
+```bash
+# Get logs
+butler -p "get logs from nginx pod in dev"
+butler -p "show me the last 200 lines of logs from api-pod"
+
+# Describe resources (shows events and details)
+butler -p "describe the failing pod in staging"
+butler -p "describe nginx deployment in dev"
+```
+
+### Clean Up Resources
+
+```bash
+# Delete resources
+butler -p "delete deployment nginx from dev"
+butler -p "delete the broken-pod from staging"
+```
+
+### End-to-End Workflows
+
+```bash
+# Create cluster and deploy in one go
+butler -p "create a cluster called demo and deploy nginx to it"
+
+# Check status and debug
+butler -p "show pods in demo"
+butler -p "get logs from the nginx pod in demo"
+butler -p "describe the nginx deployment"
 ```
 
 ## Custom Cluster Configurations
@@ -316,6 +393,43 @@ butler -p "stop prod"
 
 # Keep only active development cluster running
 # (saves CPU, memory, and battery)
+```
+
+### Deploy and Debug Application
+
+```bash
+# Create cluster
+butler -p "create a cluster called demo"
+
+# Deploy nginx
+butler -p "apply this to demo:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+"
+
+# Check deployment
+butler -p "show pods in demo"
+butler -p "get logs from nginx pod in demo"
+butler -p "describe nginx deployment in demo"
+
+# Clean up
+butler -p "delete deployment nginx from demo"
+butler -p "delete demo"
 ```
 
 ## Advanced Usage

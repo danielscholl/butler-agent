@@ -8,6 +8,7 @@ from typing import Any
 
 from agent.cluster.config import get_cluster_config
 from agent.cluster.kind_manager import KindManager
+from agent.cluster.kubectl_manager import KubectlManager
 from agent.cluster.status import ClusterStatus
 from agent.config import AgentConfig
 from agent.utils.errors import (
@@ -15,13 +16,18 @@ from agent.utils.errors import (
     ClusterAlreadyRunningError,
     ClusterNotFoundError,
     ClusterNotRunningError,
+    InvalidManifestError,
     KindCommandError,
+    KubeconfigNotFoundError,
+    KubectlCommandError,
+    ResourceNotFoundError,
 )
 
 logger = logging.getLogger(__name__)
 
 # Global instances
 _kind_manager: KindManager | None = None
+_kubectl_manager: KubectlManager | None = None
 _cluster_status: ClusterStatus | None = None
 _config: AgentConfig | None = None
 
@@ -32,9 +38,10 @@ def initialize_tools(config: AgentConfig) -> None:
     Args:
         config: Butler configuration
     """
-    global _kind_manager, _cluster_status, _config
+    global _kind_manager, _kubectl_manager, _cluster_status, _config
     _config = config
     _kind_manager = KindManager()
+    _kubectl_manager = KubectlManager()
     _cluster_status = ClusterStatus()
 
 
@@ -511,6 +518,388 @@ def restart_cluster(name: str) -> dict[str, Any]:
         }
 
 
+def kubectl_get_resources(
+    cluster_name: str,
+    resource_type: str,
+    namespace: str = "default",
+    label_selector: str | None = None,
+) -> dict[str, Any]:
+    """Get Kubernetes resources from a cluster.
+
+    This tool queries Kubernetes resources (pods, services, deployments, etc.) from
+    a KinD cluster. Use this to inspect what's running in your cluster, check
+    resource status, or filter by labels.
+
+    Common resource types:
+    - pods: Running application instances
+    - services: Network services exposing pods
+    - deployments: Declarative pod deployments
+    - namespaces: Virtual clusters for resource isolation
+    - configmaps: Configuration data
+    - secrets: Sensitive configuration data
+    - nodes: Cluster nodes
+
+    Args:
+        cluster_name: Name of the cluster to query
+        resource_type: Type of resource to get (pods, services, deployments, etc.)
+        namespace: Kubernetes namespace (default: "default")
+        label_selector: Optional label selector (e.g., "app=nginx")
+
+    Returns:
+        Dict containing:
+        - cluster_name: Cluster name
+        - resource_type: Resource type queried
+        - namespace: Namespace queried
+        - resources: List of resources (JSON format)
+        - count: Number of resources found
+        - message: Summary message
+
+    Examples:
+        - kubectl_get_resources("dev", "pods")
+        - kubectl_get_resources("staging", "services", namespace="kube-system")
+        - kubectl_get_resources("prod", "pods", label_selector="app=nginx")
+    """
+    if not _kubectl_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(
+            f"Getting {resource_type} from cluster '{cluster_name}', namespace '{namespace}'"
+        )
+
+        result = _kubectl_manager.get_resources(
+            cluster_name, resource_type, namespace, label_selector
+        )
+
+        result["message"] = (
+            f"Found {result['count']} {resource_type} in cluster '{cluster_name}', "
+            f"namespace '{namespace}'"
+        )
+
+        return result
+
+    except (KubeconfigNotFoundError, ClusterNotFoundError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": str(e),
+        }
+    except KubectlCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to get {resource_type}: {e}",
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error getting {resource_type} from cluster '{cluster_name}'")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error getting resources: {e}",
+        }
+
+
+def kubectl_apply(
+    cluster_name: str,
+    manifest: str,
+    namespace: str = "default",
+) -> dict[str, Any]:
+    """Apply a Kubernetes manifest to a cluster.
+
+    This tool deploys applications and resources to a cluster by applying
+    Kubernetes YAML manifests. Use this to deploy applications, create services,
+    or apply any Kubernetes configuration.
+
+    Args:
+        cluster_name: Name of the cluster to apply to
+        manifest: YAML manifest content to apply
+        namespace: Kubernetes namespace (default: "default")
+
+    Returns:
+        Dict containing:
+        - cluster_name: Cluster name
+        - namespace: Namespace where resources were created
+        - applied: Whether apply was successful
+        - resources: List of created/updated resources
+        - output: kubectl apply output
+        - message: Summary message
+
+    Examples:
+        - kubectl_apply("dev", nginx_deployment_yaml)
+        - kubectl_apply("staging", service_yaml, namespace="apps")
+    """
+    if not _kubectl_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(f"Applying manifest to cluster '{cluster_name}', namespace '{namespace}'")
+
+        result = _kubectl_manager.apply_manifest(cluster_name, manifest, namespace)
+
+        result["message"] = (
+            f"Successfully applied {len(result['resources'])} resource(s) to "
+            f"cluster '{cluster_name}', namespace '{namespace}'"
+        )
+
+        return result
+
+    except (KubeconfigNotFoundError, ClusterNotFoundError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": str(e),
+        }
+    except InvalidManifestError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Invalid manifest: {e}",
+        }
+    except KubectlCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to apply manifest: {e}",
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error applying manifest to cluster '{cluster_name}'")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error applying manifest: {e}",
+        }
+
+
+def kubectl_delete(
+    cluster_name: str,
+    resource_type: str,
+    name: str,
+    namespace: str = "default",
+    force: bool = False,
+) -> dict[str, Any]:
+    """Delete a Kubernetes resource from a cluster.
+
+    This tool removes specific resources from a cluster. Use this to clean up
+    deployments, services, pods, or any other Kubernetes resources.
+
+    Args:
+        cluster_name: Name of the cluster
+        resource_type: Type of resource (pod, service, deployment, etc.)
+        name: Name of the resource to delete
+        namespace: Kubernetes namespace (default: "default")
+        force: Force deletion with zero grace period (default: False)
+
+    Returns:
+        Dict containing:
+        - cluster_name: Cluster name
+        - resource_type: Resource type deleted
+        - name: Resource name
+        - namespace: Namespace
+        - deleted: Whether resource was deleted
+        - message: Status message
+
+    Examples:
+        - kubectl_delete("dev", "deployment", "nginx")
+        - kubectl_delete("staging", "service", "api", namespace="apps")
+        - kubectl_delete("prod", "pod", "broken-pod", force=True)
+    """
+    if not _kubectl_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(
+            f"Deleting {resource_type}/{name} from cluster '{cluster_name}', "
+            f"namespace '{namespace}'"
+        )
+
+        result = _kubectl_manager.delete_resource(
+            cluster_name, resource_type, name, namespace, force
+        )
+
+        return result
+
+    except (KubeconfigNotFoundError, ClusterNotFoundError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": str(e),
+        }
+    except KubectlCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to delete {resource_type}/{name}: {e}",
+        }
+    except Exception as e:
+        logger.exception(
+            f"Unexpected error deleting {resource_type}/{name} from cluster '{cluster_name}'"
+        )
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error deleting resource: {e}",
+        }
+
+
+def kubectl_logs(
+    cluster_name: str,
+    pod_name: str,
+    namespace: str = "default",
+    container: str | None = None,
+    tail_lines: int = 100,
+    previous: bool = False,
+) -> dict[str, Any]:
+    """Get logs from a pod for debugging.
+
+    This tool retrieves container logs from pods in a cluster. Use this to
+    debug application issues, view output, or troubleshoot failures.
+
+    Args:
+        cluster_name: Name of the cluster
+        pod_name: Name of the pod
+        namespace: Kubernetes namespace (default: "default")
+        container: Container name (required for multi-container pods)
+        tail_lines: Number of recent lines to retrieve (default: 100)
+        previous: Get logs from previous container instance (default: False)
+
+    Returns:
+        Dict containing:
+        - cluster_name: Cluster name
+        - pod_name: Pod name
+        - namespace: Namespace
+        - container: Container name (if specified)
+        - logs: Log output
+        - lines: Number of log lines
+        - message: Summary message
+
+    Examples:
+        - kubectl_logs("dev", "nginx-pod")
+        - kubectl_logs("staging", "api-pod", container="app", tail_lines=200)
+        - kubectl_logs("prod", "crashed-pod", previous=True)
+    """
+    if not _kubectl_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(f"Getting logs from pod '{pod_name}' in cluster '{cluster_name}'")
+
+        result = _kubectl_manager.get_logs(
+            cluster_name, pod_name, namespace, container, tail_lines, previous
+        )
+
+        result["message"] = (
+            f"Retrieved {result['lines']} lines of logs from pod '{pod_name}' "
+            f"in cluster '{cluster_name}', namespace '{namespace}'"
+        )
+
+        return result
+
+    except (KubeconfigNotFoundError, ClusterNotFoundError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": str(e),
+        }
+    except ResourceNotFoundError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": str(e),
+        }
+    except KubectlCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to get logs from pod '{pod_name}': {e}",
+        }
+    except Exception as e:
+        logger.exception(f"Unexpected error getting logs from pod '{pod_name}'")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error getting logs: {e}",
+        }
+
+
+def kubectl_describe(
+    cluster_name: str,
+    resource_type: str,
+    name: str,
+    namespace: str = "default",
+) -> dict[str, Any]:
+    """Describe a Kubernetes resource in detail.
+
+    This tool provides comprehensive information about a resource including
+    its configuration, status, events, and more. Use this to debug issues,
+    understand resource configuration, or view detailed status.
+
+    Args:
+        cluster_name: Name of the cluster
+        resource_type: Type of resource (pod, service, deployment, etc.)
+        name: Name of the resource
+        namespace: Kubernetes namespace (default: "default")
+
+    Returns:
+        Dict containing:
+        - cluster_name: Cluster name
+        - resource_type: Resource type
+        - name: Resource name
+        - namespace: Namespace
+        - description: Detailed resource description (includes events)
+        - message: Summary message
+
+    Examples:
+        - kubectl_describe("dev", "pod", "nginx-abc123")
+        - kubectl_describe("staging", "deployment", "api")
+        - kubectl_describe("prod", "service", "web", namespace="apps")
+    """
+    if not _kubectl_manager:
+        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    try:
+        logger.info(
+            f"Describing {resource_type}/{name} in cluster '{cluster_name}', "
+            f"namespace '{namespace}'"
+        )
+
+        result = _kubectl_manager.describe_resource(cluster_name, resource_type, name, namespace)
+
+        result["message"] = (
+            f"Retrieved description for {resource_type}/{name} in cluster '{cluster_name}', "
+            f"namespace '{namespace}'"
+        )
+
+        return result
+
+    except (KubeconfigNotFoundError, ClusterNotFoundError) as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": str(e),
+        }
+    except ResourceNotFoundError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": str(e),
+        }
+    except KubectlCommandError as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Failed to describe {resource_type}/{name}: {e}",
+        }
+    except Exception as e:
+        logger.exception(
+            f"Unexpected error describing {resource_type}/{name} in cluster '{cluster_name}'"
+        )
+        return {
+            "success": False,
+            "error": str(e),
+            "message": f"Unexpected error describing resource: {e}",
+        }
+
+
 # Tool metadata for agent framework
 CLUSTER_TOOLS = [
     create_cluster,
@@ -521,4 +910,9 @@ CLUSTER_TOOLS = [
     start_cluster,
     stop_cluster,
     restart_cluster,
+    kubectl_get_resources,
+    kubectl_apply,
+    kubectl_delete,
+    kubectl_logs,
+    kubectl_describe,
 ]
