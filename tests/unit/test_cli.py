@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.keys import Keys
 
 from agent.cli import build_parser, run_single_query
 
@@ -183,10 +182,18 @@ class TestInteractiveMode:
         assert prompt == "> "
 
     def test_create_key_bindings(self):
-        """Test key bindings creation for ESC key."""
-        from agent.cli import _create_key_bindings
+        """Test key bindings creation using KeybindingManager."""
+        from agent.utils.keybindings import (
+            ClearPromptHandler,
+            KeybindingManager,
+        )
 
-        key_bindings = _create_key_bindings()
+        # Create manager and register handlers
+        manager = KeybindingManager()
+        manager.register_handler(ClearPromptHandler())
+
+        # Create keybindings
+        key_bindings = manager.create_keybindings()
 
         # Verify that key_bindings is a KeyBindings object
         assert key_bindings is not None
@@ -194,10 +201,10 @@ class TestInteractiveMode:
 
     def test_esc_key_clears_buffer(self):
         """Test that ESC key binding clears the buffer text."""
-        from agent.cli import _create_key_bindings
+        from agent.utils.keybindings import ClearPromptHandler
 
-        # Create key bindings
-        kb = _create_key_bindings()
+        # Create handler
+        handler = ClearPromptHandler()
 
         # Create mock event with buffer containing text
         mock_event = MagicMock()
@@ -205,11 +212,8 @@ class TestInteractiveMode:
         mock_buffer.text = "Some test text"
         mock_event.app.current_buffer = mock_buffer
 
-        # Find and execute the ESC binding
-        for binding in kb.bindings:
-            if binding.keys == (Keys.Escape,):
-                binding.handler(mock_event)
-                break
+        # Execute handler
+        handler.handle(mock_event)
 
         # Verify buffer was cleared
         assert mock_buffer.text == ""

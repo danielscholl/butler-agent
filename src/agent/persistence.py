@@ -4,12 +4,16 @@ This module provides functionality to save and load conversation threads,
 enabling users to maintain conversation history across sessions.
 """
 
+import inspect
 import json
 import logging
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from rich.console import Console
+from rich.markdown import Markdown
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +100,130 @@ class ThreadPersistence:
             logger.error(f"Failed to save metadata: {e}")
             raise
 
+    def _generate_context_summary(self, messages: list[dict]) -> str:
+        """Generate a concise context summary from message history.
+
+        Args:
+            messages: List of message dicts with role and content
+
+        Returns:
+            Context summary string for AI
+        """
+        if not messages:
+            return "Empty session - no previous context."
+
+        summary_parts = ["You are resuming a previous Butler session. Here's what happened:\n"]
+
+        # Track key information
+        clusters_mentioned = set()
+        tools_called = []
+        user_requests = []
+
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+
+            if role == "user":
+                user_requests.append(content[:200])  # Truncate long messages
+
+                # Extract cluster names mentioned
+                cluster_matches = re.findall(
+                    r"cluster[s]?\s+(?:called|named)?\s+['\"]?([a-z0-9-]+)", content, re.IGNORECASE
+                )
+                clusters_mentioned.update(cluster_matches)
+
+            # Track tool calls
+            if "tool_calls" in msg:
+                for tc in msg["tool_calls"]:
+                    tools_called.append(tc.get("name", "unknown"))
+
+        # Build summary
+        if user_requests:
+            summary_parts.append("User requests:")
+            for i, req in enumerate(user_requests[:5], 1):  # Max 5
+                summary_parts.append(f"{i}. {req}")
+            summary_parts.append("")
+
+        if clusters_mentioned:
+            summary_parts.append(f"Clusters mentioned: {', '.join(clusters_mentioned)}")
+
+        if tools_called:
+            summary_parts.append(f"Tools used: {', '.join(set(tools_called))}")
+
+        summary_parts.append(f"\nTotal conversation: {len(messages)} messages exchanged.")
+        summary_parts.append(
+            "\nPlease continue helping the user based on this context. "
+            "If the user asks about previous actions, you can reference the above."
+        )
+
+        return "\n".join(summary_parts)
+
+    async def _fallback_serialize(self, thread: Any) -> dict:
+        """Fallback serialization when thread.serialize() fails.
+
+        Manually extracts messages and converts them to JSON-serializable format.
+
+        Args:
+            thread: AgentThread to serialize
+
+        Returns:
+            Dictionary with serialized thread data
+        """
+        messages_data = []
+
+        # Debug: Check what attributes the thread has
+        logger.debug(f"Thread type: {type(thread)}")
+        logger.debug(f"Thread has message_store: {hasattr(thread, 'message_store')}")
+
+        # Extract messages from message_store (Agent Framework pattern)
+        messages = []
+        if hasattr(thread, "message_store") and thread.message_store:
+            try:
+                messages = await thread.message_store.list_messages()
+                logger.debug(f"Extracted {len(messages)} messages from message_store")
+            except Exception as e:
+                logger.warning(f"Failed to list messages from store: {e}")
+
+        if messages:
+            for msg in messages:
+                # Extract role (might be a Role enum object, convert to string)
+                role = getattr(msg, "role", "unknown")
+                msg_dict: dict[str, Any] = {"role": str(role) if role else "unknown"}
+
+                # Extract message content
+                if hasattr(msg, "text"):
+                    msg_dict["content"] = str(msg.text)
+                elif hasattr(msg, "content"):
+                    # Content can be string or list of content blocks
+                    content = msg.content
+                    if isinstance(content, str):
+                        msg_dict["content"] = content
+                    elif isinstance(content, list):
+                        # Join content blocks
+                        msg_dict["content"] = " ".join(str(block) for block in content)
+                    else:
+                        msg_dict["content"] = str(content)
+                else:
+                    msg_dict["content"] = str(msg)
+
+                # Extract tool calls if present
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    tool_calls_data = []
+                    for tc in msg.tool_calls:
+                        tool_call = {
+                            "name": str(getattr(tc, "name", "unknown")),
+                            "arguments": str(getattr(tc, "arguments", "")),
+                        }
+                        tool_calls_data.append(tool_call)
+                    msg_dict["tool_calls"] = tool_calls_data
+
+                messages_data.append(msg_dict)
+
+        return {
+            "messages": messages_data,
+            "metadata": {"fallback": True, "version": "1.0"},
+        }
+
     async def save_thread(
         self,
         thread: Any,
@@ -121,14 +249,84 @@ class ThreadPersistence:
         logger.info(f"Saving conversation '{safe_name}'...")
 
         try:
+            # Debug: Inspect thread structure
+            logger.debug(f"Saving thread type: {type(thread)}")
+            logger.debug(f"Thread has 'messages' attr: {hasattr(thread, 'messages')}")
+
+            # Check various possible message storage locations
+            possible_attrs = [
+                "messages",
+                "_messages",
+                "history",
+                "_history",
+                "turns",
+                "conversation",
+            ]
+            for attr in possible_attrs:
+                if hasattr(thread, attr):
+                    value = getattr(thread, attr)
+                    logger.debug(
+                        f"Thread.{attr} = {type(value)}, len={len(value) if hasattr(value, '__len__') else 'N/A'}"
+                    )
+
+            # Extract first message for preview from message_store
+            first_message = ""
+            message_count = 0
+            if hasattr(thread, "message_store") and thread.message_store:
+                try:
+                    messages = await thread.message_store.list_messages()
+                    message_count = len(messages)
+                    logger.debug(f"Extracting preview from {message_count} messages")
+
+                    # Try to get first user message
+                    for msg in messages:
+                        if hasattr(msg, "role") and msg.role == "user":
+                            if hasattr(msg, "text"):
+                                first_message = str(msg.text)[:100]
+                            elif hasattr(msg, "content"):
+                                content = msg.content
+                                if isinstance(content, str):
+                                    first_message = content[:100]
+                                else:
+                                    first_message = str(content)[:100]
+                            break
+                except Exception as e:
+                    logger.warning(f"Failed to extract first message: {e}")
+            else:
+                logger.warning("Thread has no message_store!")
+
             # Serialize thread
-            serialized = await thread.serialize()
+            serialized = None
+            try:
+                # Try async serialize first
+                if hasattr(thread, "serialize"):
+                    if inspect.iscoroutinefunction(thread.serialize):
+                        serialized = await thread.serialize()
+                    else:
+                        # Sync serialize method
+                        serialized = thread.serialize()
+                else:
+                    raise AttributeError("Thread has no serialize method")
+
+                # Verify the serialized data is actually JSON-serializable
+                # Try to serialize and deserialize to check
+                json.dumps(serialized)
+
+            except (AttributeError, TypeError, json.JSONDecodeError, Exception) as serialize_error:
+                # Fallback: Manual serialization if framework serialize fails or returns non-JSON data
+                logger.warning(
+                    f"Thread serialization failed or returned non-JSON data: {serialize_error}. "
+                    "Using fallback serialization."
+                )
+                serialized = await self._fallback_serialize(thread)
 
             # Add metadata
             conversation_data = {
                 "name": safe_name,
                 "description": description,
                 "created_at": datetime.now().isoformat(),
+                "message_count": message_count,
+                "first_message": first_message,
                 "thread": serialized,
             }
 
@@ -141,6 +339,8 @@ class ThreadPersistence:
             self.metadata["conversations"][safe_name] = {
                 "description": description,
                 "created_at": conversation_data["created_at"],
+                "message_count": message_count,
+                "first_message": first_message,
                 "file": str(file_path),
             }
             self._save_metadata()
@@ -152,7 +352,7 @@ class ThreadPersistence:
             logger.error(f"Failed to save conversation: {e}")
             raise
 
-    async def load_thread(self, agent: Any, name: str) -> Any:
+    async def load_thread(self, agent: Any, name: str) -> tuple[Any, str | None]:
         """Load a conversation thread.
 
         Args:
@@ -160,7 +360,9 @@ class ThreadPersistence:
             name: Name of conversation to load
 
         Returns:
-            Deserialized AgentThread
+            Tuple of (thread, context_summary)
+            - thread: Deserialized AgentThread
+            - context_summary: Optional context summary for AI (for fallback sessions)
 
         Raises:
             ValueError: If name is invalid or unsafe
@@ -181,11 +383,60 @@ class ThreadPersistence:
             with open(file_path) as f:
                 conversation_data = json.load(f)
 
-            # Deserialize thread using agent
-            thread = await agent.agent.deserialize_thread(conversation_data["thread"])
+            # Check if this was saved with fallback serialization
+            thread_data = conversation_data["thread"]
+            if isinstance(thread_data, dict) and thread_data.get("metadata", {}).get("fallback"):
+                logger.warning(
+                    f"Session '{safe_name}' was saved with fallback serialization. "
+                    "Full context restoration not supported yet."
+                )
 
-            logger.info(f"Conversation '{safe_name}' loaded successfully")
-            return thread
+                # Display the conversation history to the user
+                console = Console()
+                messages = thread_data.get("messages", [])
+
+                if messages:
+                    console.print("\n[bold cyan]Previous Session History:[/bold cyan]")
+                    console.print(f"[dim]({len(messages)} messages)[/dim]\n")
+
+                    for msg in messages:
+                        role = msg.get("role", "unknown")
+                        content = msg.get("content", "")
+
+                        if role == "user":
+                            console.print(f"[bold green]You:[/bold green] {content}")
+                        elif role == "assistant":
+                            console.print("[bold cyan]Butler:[/bold cyan]")
+                            console.print(Markdown(content))
+
+                        # Show tool calls if present
+                        if "tool_calls" in msg:
+                            console.print(f"[dim]  Tools used: {len(msg['tool_calls'])}[/dim]")
+
+                        console.print()
+
+                    console.print(
+                        "[cyan]ℹ️  Session restored from history. "
+                        "Context summary will be sent to AI.[/cyan]\n"
+                    )
+
+                # Generate context summary for AI
+                context_summary = self._generate_context_summary(messages)
+
+                # Create a new thread
+                thread = agent.get_new_thread()
+
+                logger.info(
+                    f"Conversation '{safe_name}' loaded with fallback (context summary generated)"
+                )
+                return thread, context_summary
+            else:
+                # Deserialize thread using agent framework
+                thread = await agent.agent.deserialize_thread(thread_data)
+
+                logger.info(f"Conversation '{safe_name}' loaded successfully")
+                # No context summary needed - thread has full context
+                return thread, None
 
         except Exception as e:
             logger.error(f"Failed to load conversation: {e}")
@@ -195,7 +446,7 @@ class ThreadPersistence:
         """List all saved conversations.
 
         Returns:
-            List of conversation metadata dicts with name, description, created_at
+            List of conversation metadata dicts with name, description, created_at, etc.
         """
         conversations = []
         for name, meta in self.metadata["conversations"].items():
@@ -204,6 +455,8 @@ class ThreadPersistence:
                     "name": name,
                     "description": meta.get("description"),
                     "created_at": meta.get("created_at"),
+                    "message_count": meta.get("message_count", 0),
+                    "first_message": meta.get("first_message", ""),
                 }
             )
 
