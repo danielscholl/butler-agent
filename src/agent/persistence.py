@@ -96,6 +96,48 @@ class ThreadPersistence:
             logger.error(f"Failed to save metadata: {e}")
             raise
 
+    def _fallback_serialize(self, thread: Any) -> dict:
+        """Fallback serialization when thread.serialize() fails.
+
+        Manually extracts messages and converts them to JSON-serializable format.
+
+        Args:
+            thread: AgentThread to serialize
+
+        Returns:
+            Dictionary with serialized thread data
+        """
+        messages_data = []
+
+        if hasattr(thread, "messages") and thread.messages:
+            for msg in thread.messages:
+                msg_dict = {"role": getattr(msg, "role", "unknown")}
+
+                # Extract message content
+                if hasattr(msg, "text"):
+                    msg_dict["content"] = str(msg.text)
+                elif hasattr(msg, "content"):
+                    msg_dict["content"] = str(msg.content)
+                else:
+                    msg_dict["content"] = str(msg)
+
+                # Extract tool calls if present
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    msg_dict["tool_calls"] = [
+                        {
+                            "name": getattr(tc, "name", "unknown"),
+                            "arguments": str(getattr(tc, "arguments", "")),
+                        }
+                        for tc in msg.tool_calls
+                    ]
+
+                messages_data.append(msg_dict)
+
+        return {
+            "messages": messages_data,
+            "metadata": {"fallback": True, "version": "1.0"},
+        }
+
     async def save_thread(
         self,
         thread: Any,
@@ -121,14 +163,47 @@ class ThreadPersistence:
         logger.info(f"Saving conversation '{safe_name}'...")
 
         try:
+            # Extract first message for preview
+            first_message = ""
+            message_count = 0
+            if hasattr(thread, "messages") and thread.messages:
+                message_count = len(thread.messages)
+                # Try to get first user message
+                for msg in thread.messages:
+                    if hasattr(msg, "role") and msg.role == "user":
+                        if hasattr(msg, "text"):
+                            first_message = str(msg.text)[:100]
+                        elif hasattr(msg, "content"):
+                            first_message = str(msg.content)[:100]
+                        break
+
             # Serialize thread
-            serialized = await thread.serialize()
+            try:
+                # Try async serialize first
+                if hasattr(thread, "serialize"):
+                    import inspect
+
+                    if inspect.iscoroutinefunction(thread.serialize):
+                        serialized = await thread.serialize()
+                    else:
+                        # Sync serialize method
+                        serialized = thread.serialize()
+                else:
+                    raise AttributeError("Thread has no serialize method")
+            except (AttributeError, TypeError, json.JSONDecodeError) as serialize_error:
+                # Fallback: Manual serialization if framework serialize fails
+                logger.warning(
+                    f"Thread serialize() failed: {serialize_error}. Using fallback serialization."
+                )
+                serialized = self._fallback_serialize(thread)
 
             # Add metadata
             conversation_data = {
                 "name": safe_name,
                 "description": description,
                 "created_at": datetime.now().isoformat(),
+                "message_count": message_count,
+                "first_message": first_message,
                 "thread": serialized,
             }
 
@@ -141,6 +216,8 @@ class ThreadPersistence:
             self.metadata["conversations"][safe_name] = {
                 "description": description,
                 "created_at": conversation_data["created_at"],
+                "message_count": message_count,
+                "first_message": first_message,
                 "file": str(file_path),
             }
             self._save_metadata()
@@ -181,8 +258,19 @@ class ThreadPersistence:
             with open(file_path) as f:
                 conversation_data = json.load(f)
 
-            # Deserialize thread using agent
-            thread = await agent.agent.deserialize_thread(conversation_data["thread"])
+            # Check if this was saved with fallback serialization
+            thread_data = conversation_data["thread"]
+            if isinstance(thread_data, dict) and thread_data.get("metadata", {}).get("fallback"):
+                logger.warning(
+                    f"Session '{safe_name}' was saved with fallback serialization. "
+                    "Full context restoration not supported yet."
+                )
+                # Create a new thread instead of trying to deserialize
+                # User will see the conversation was loaded but context will be fresh
+                thread = agent.get_new_thread()
+            else:
+                # Deserialize thread using agent framework
+                thread = await agent.agent.deserialize_thread(thread_data)
 
             logger.info(f"Conversation '{safe_name}' loaded successfully")
             return thread
@@ -195,7 +283,7 @@ class ThreadPersistence:
         """List all saved conversations.
 
         Returns:
-            List of conversation metadata dicts with name, description, created_at
+            List of conversation metadata dicts with name, description, created_at, etc.
         """
         conversations = []
         for name, meta in self.metadata["conversations"].items():
@@ -204,6 +292,8 @@ class ThreadPersistence:
                     "name": name,
                     "description": meta.get("description"),
                     "created_at": meta.get("created_at"),
+                    "message_count": meta.get("message_count", 0),
+                    "first_message": meta.get("first_message", ""),
                 }
             )
 
