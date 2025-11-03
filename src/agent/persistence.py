@@ -186,7 +186,7 @@ class ThreadPersistence:
             for msg in messages:
                 # Extract role (might be a Role enum object, convert to string)
                 role = getattr(msg, "role", "unknown")
-                msg_dict = {"role": str(role) if role else "unknown"}
+                msg_dict: dict[str, Any] = {"role": str(role) if role else "unknown"}
 
                 # Extract message content
                 if hasattr(msg, "text"):
