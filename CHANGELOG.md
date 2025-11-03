@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.3...butler-agent-v0.1.4) (2025-11-03)
+
+
+### Features
+
+* **cluster:** export and persist kubeconfig on cluster creation ([#18](https://github.com/danielscholl/butler-agent/issues/18)) ([228b198](https://github.com/danielscholl/butler-agent/commit/228b198fb7c46c428b6d045a84020b2fae549d08))
+* **kubectl:** add Kubernetes resource management capabilities ([#16](https://github.com/danielscholl/butler-agent/issues/16)) ([0d52770](https://github.com/danielscholl/butler-agent/commit/0d527706e1cb1324ef51246d2dfb0b5715261f56))
+
 ## [0.1.3](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.2...butler-agent-v0.1.3) (2025-11-02)
 
 
