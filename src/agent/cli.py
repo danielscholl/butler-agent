@@ -26,7 +26,6 @@ from agent.utils.errors import ConfigurationError
 from agent.utils.keybindings import (
     ClearPromptHandler,
     KeybindingManager,
-    ShellCommandHandler,
 )
 from agent.utils.terminal import clear_screen
 
@@ -374,7 +373,7 @@ async def run_chat_mode(
         # Setup keybinding manager with handlers
         keybinding_manager = KeybindingManager()
         keybinding_manager.register_handler(ClearPromptHandler())
-        keybinding_manager.register_handler(ShellCommandHandler())
+        # Note: ShellCommandHandler removed - shell commands handled in main loop
         key_bindings = keybinding_manager.create_keybindings()
 
         # Setup prompt session with history and key bindings
@@ -391,6 +390,43 @@ async def run_chat_mode(
                 user_input = await session.prompt_async(prompt_text)
 
                 if not user_input or not user_input.strip():
+                    continue
+
+                # Handle shell commands (lines starting with !)
+                if user_input.strip().startswith("!"):
+                    from agent.utils.terminal import execute_shell_command
+
+                    command = user_input.strip()[1:].strip()
+
+                    if not command:
+                        console.print(
+                            "\n[yellow]No command specified. Type !<command> to execute shell commands.[/yellow]\n"
+                        )
+                        continue
+
+                    # Show what we're executing
+                    console.print(f"\n[dim]$ {command}[/dim]")
+
+                    # Execute the command
+                    exit_code, stdout, stderr = execute_shell_command(command)
+
+                    # Display output
+                    if stdout:
+                        console.print(stdout, end="")
+                    if stderr:
+                        console.print(f"[red]{stderr}[/red]", end="")
+
+                    # Display exit code
+                    if exit_code == 0:
+                        console.print(f"\n[dim][green]Exit code: {exit_code}[/green][/dim]")
+                    elif exit_code == 124:
+                        console.print(
+                            f"\n[dim][yellow]Exit code: {exit_code} (timeout)[/yellow][/dim]"
+                        )
+                    else:
+                        console.print(f"\n[dim][red]Exit code: {exit_code}[/red][/dim]")
+
+                    console.print()
                     continue
 
                 # Handle special commands

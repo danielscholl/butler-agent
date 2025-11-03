@@ -186,13 +186,11 @@ class TestInteractiveMode:
         from agent.utils.keybindings import (
             ClearPromptHandler,
             KeybindingManager,
-            ShellCommandHandler,
         )
 
         # Create manager and register handlers
         manager = KeybindingManager()
         manager.register_handler(ClearPromptHandler())
-        manager.register_handler(ShellCommandHandler())
 
         # Create keybindings
         key_bindings = manager.create_keybindings()
