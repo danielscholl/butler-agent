@@ -92,8 +92,7 @@ class KubectlManager:
             )
             if result.returncode != 0:
                 raise ClusterNotFoundError(
-                    f"Cluster '{cluster_name}' is not accessible. "
-                    f"It may be stopped or deleted. Try starting it first."
+                    f"Cluster '{cluster_name}' is not accessible. It may be stopped or deleted. Try starting it first."
                 )
         except subprocess.TimeoutExpired as e:
             raise ClusterNotFoundError(
@@ -104,7 +103,7 @@ class KubectlManager:
 
     def _run_kubectl(
         self, args: list[str], kubeconfig_path: Path, timeout: int = 30
-    ) -> subprocess.CompletedProcess:
+    ) -> subprocess.CompletedProcess[str]:
         """Run kubectl command with kubeconfig.
 
         Args:
