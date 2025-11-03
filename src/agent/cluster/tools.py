@@ -106,9 +106,22 @@ def create_cluster(
         # Create cluster
         result = _kind_manager.create_cluster(name, cluster_config, k8s_version)
 
-        # Add kubeconfig path if data directory is configured
+        # Export and save kubeconfig if data directory is configured
         if _config:
-            result["kubeconfig_path"] = str(_config.get_kubeconfig_path(name))
+            try:
+                kubeconfig_path = _config.get_kubeconfig_path(name)
+                kubeconfig_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # Export kubeconfig from kind
+                kubeconfig_content = _kind_manager.get_kubeconfig(name)
+                kubeconfig_path.write_text(kubeconfig_content)
+
+                result["kubeconfig_path"] = str(kubeconfig_path)
+                logger.info(f"Kubeconfig saved to {kubeconfig_path}")
+            except Exception as e:
+                logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
+                # Don't fail cluster creation if kubeconfig save fails
+                result["kubeconfig_path"] = "not_saved"
 
         result["config_source"] = config_source
         result["message"] = (
