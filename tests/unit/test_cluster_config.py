@@ -25,7 +25,7 @@ class TestClusterConfigTemplates:
             template_path = self.TEMPLATE_DIR / template
             with open(template_path) as f:
                 content = f.read()
-            
+
             # Basic structure validation before formatting
             # Full YAML parsing is done in test_template_formatting after {name} is replaced
             assert "kind: Cluster" in content
@@ -36,10 +36,10 @@ class TestClusterConfigTemplates:
     def test_minimal_template_structure(self):
         """Test minimal template has correct structure."""
         template_path = self.TEMPLATE_DIR / "minimal.yaml"
-        
+
         with open(template_path) as f:
             content = f.read()
-        
+
         # Minimal should have only control plane
         assert "- role: control-plane" in content
         # Should not have kubeadmConfigPatches
@@ -54,17 +54,17 @@ class TestClusterConfigTemplates:
     def test_default_template_structure(self):
         """Test default template has correct structure."""
         template_path = self.TEMPLATE_DIR / "default.yaml"
-        
+
         with open(template_path) as f:
             content = f.read()
-        
+
         # Default should have control plane with ingress config and one worker
         assert "- role: control-plane" in content
         assert "kubeadmConfigPatches" in content
         assert "ingress-ready=true" in content
         assert "containerPort: 80" in content
         assert "containerPort: 443" in content
-        
+
         # Should have exactly one worker
         lines = content.strip().split("\n")
         worker_count = sum(1 for line in lines if "role: worker" in line)
@@ -73,15 +73,15 @@ class TestClusterConfigTemplates:
     def test_custom_template_structure(self):
         """Test custom template has correct structure."""
         template_path = self.TEMPLATE_DIR / "custom.yaml"
-        
+
         with open(template_path) as f:
             content = f.read()
-        
+
         # Custom should have control plane with ingress config and three workers
         assert "- role: control-plane" in content
         assert "kubeadmConfigPatches" in content
         assert "ingress-ready=true" in content
-        
+
         # Should have exactly three workers
         lines = content.strip().split("\n")
         worker_count = sum(1 for line in lines if "role: worker" in line)
@@ -93,12 +93,12 @@ class TestClusterConfigTemplates:
             template_path = self.TEMPLATE_DIR / f"{template_name}.yaml"
             with open(template_path) as f:
                 content = f.read()
-            
+
             # Test formatting with a cluster name
             formatted = content.format(name="test-cluster")
             assert "test-cluster" in formatted
             assert "{name}" not in formatted
-            
+
             # Verify formatted content is valid YAML
             parsed = yaml.safe_load(formatted)
             assert parsed["kind"] == "Cluster"
