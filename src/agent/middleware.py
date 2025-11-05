@@ -62,8 +62,7 @@ async def agent_run_logging_middleware(
 
         # Emit LLM response event
         if should_show_visualization() and llm_event_id:
-            response_event = LLMResponseEvent(duration=duration)
-            response_event.event_id = llm_event_id
+            response_event = LLMResponseEvent(duration=duration, event_id=llm_event_id)
             get_event_emitter().emit(response_event)
             logger.debug(f"Emitted LLM response event ({duration:.2f}s)")
 
@@ -168,8 +167,8 @@ async def logging_function_middleware(
                 tool_name=tool_name,
                 result_summary=summary,
                 duration=duration,
+                event_id=tool_event_id,
             )
-            complete_event.event_id = tool_event_id
             get_event_emitter().emit(complete_event)
 
         return result
@@ -183,8 +182,8 @@ async def logging_function_middleware(
                 tool_name=tool_name,
                 error_message=str(e),
                 duration=duration,
+                event_id=tool_event_id,
             )
-            error_event.event_id = tool_event_id
             get_event_emitter().emit(error_event)
 
         raise

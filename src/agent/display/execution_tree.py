@@ -451,7 +451,7 @@ class ExecutionTreeDisplay:
         self._session_start_time = datetime.now()
 
         # Start Rich Live display with reasonable refresh rate
-        # 10Hz (100ms) provides smooth updates without excessive CPU usage
+        # 5Hz (200ms) provides smooth updates without excessive CPU usage
         self._live = Live(
             self._render_phases(),
             console=self.console,
