@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.7...butler-agent-v0.1.8) (2025-11-05)
+
+
+### Bug Fixes
+
+* **core:** fix issues in 2 files ([#25](https://github.com/danielscholl/butler-agent/issues/25)) ([3dd748f](https://github.com/danielscholl/butler-agent/commit/3dd748ffda0f19c261acd4ebfb0e5dde00e4eb56))
+
 ## [0.1.7](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.6...butler-agent-v0.1.7) (2025-11-05)
 
 
