@@ -146,7 +146,7 @@ def _cleanup_old_logs(log_dir: Path, keep: int = MAX_LOG_FILES_TO_RETAIN) -> Non
 
 
 def setup_logging(log_level: str = "info", enable_file_logging: bool = True) -> None:
-    """Setup logging with Rich handler and optional file logging.
+    """Setup logging to file only (no console output to avoid cluttering CLI).
 
     Args:
         log_level: Logging level (debug, info, warning, error)
@@ -154,14 +154,7 @@ def setup_logging(log_level: str = "info", enable_file_logging: bool = True) -> 
     """
     level = getattr(logging, log_level.upper(), logging.INFO)
 
-    handlers: list[logging.Handler] = [
-        RichHandler(
-            console=console,
-            show_time=False,
-            show_path=False,
-            rich_tracebacks=True,
-        )
-    ]
+    handlers: list[logging.Handler] = []
 
     # Add file handler for debugging
     if enable_file_logging:
@@ -212,6 +205,20 @@ def setup_logging(log_level: str = "info", enable_file_logging: bool = True) -> 
         except Exception as e:
             # File logging is optional, don't fail if it doesn't work
             console.print(f"[dim]Warning: Could not enable file logging: {e}[/dim]")
+
+    # Fallback: if no handlers were added, add console handler to prevent silent failures
+    if not handlers:
+        handlers.append(
+            RichHandler(
+                console=console,
+                show_time=False,
+                show_path=False,
+                rich_tracebacks=True,
+            )
+        )
+        console.print(
+            "[dim]Warning: No log handlers configured. Using console logging as fallback.[/dim]"
+        )
 
     logging.basicConfig(
         level=level,
@@ -371,7 +378,7 @@ async def run_chat_mode(
         config = AgentConfig()
         config.validate()
 
-        # Setup logging
+        # Setup logging (file only, no console output)
         log_level = "debug" if verbose else config.log_level
         setup_logging(log_level)
 
@@ -783,7 +790,7 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
         config = AgentConfig()
         config.validate()
 
-        # Setup logging
+        # Setup logging (file only, no console output)
         log_level = "debug" if verbose else config.log_level
         setup_logging(log_level)
 
@@ -939,6 +946,14 @@ Clean up old sessions:
 > /purge
 ⚠ This will delete ALL 15 saved sessions. Continue? (y/n): y
 ```
+
+## Logs
+
+Butler logs are saved to `~/.butler/logs/` with detailed debug information:
+- Log files are named `butler-{timestamp}.log` with JSON format
+- Logs are written only to files to keep the CLI interface clean
+- The last 10 log files are kept, older ones are automatically deleted
+- Check the log files for detailed debugging information
 
 ## Tips
 
