@@ -4,8 +4,10 @@ These functions are exposed as tools that the AI agent can use to manage KinD cl
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
+from agent.cluster.addons import AddonManager
 from agent.cluster.config import get_cluster_config
 from agent.cluster.kind_manager import KindManager
 from agent.cluster.kubectl_manager import KubectlManager
@@ -49,11 +51,13 @@ def create_cluster(
     name: str,
     config: str = "default",
     kubernetes_version: str | None = None,
+    addons: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Create a new KinD cluster.
+    """Create a new KinD cluster with optional add-ons.
 
     This tool creates a new Kubernetes in Docker (KinD) cluster with the specified
     configuration. The cluster will be running locally and ready for deployment.
+    Optionally installs add-ons like NGINX Ingress Controller.
 
     Configuration discovery (automatic):
     1. Named custom: ./data/infra/kind-{config}.yaml (when config != minimal/default/custom)
@@ -64,6 +68,10 @@ def create_cluster(
     - create_cluster("dev", "production") → looks for kind-production.yaml
     - create_cluster("app", "default") → looks for kind-config.yaml, falls back to built-in
     - create_cluster("test", "minimal") → uses built-in minimal template
+    - create_cluster("dev", "default", addons=["ingress"]) → cluster with NGINX Ingress
+
+    Available add-ons:
+    - ingress: NGINX Ingress Controller for HTTP/HTTPS routing
 
     Args:
         name: Name for the cluster (lowercase alphanumeric with hyphens)
@@ -71,6 +79,7 @@ def create_cluster(
                 Built-in templates: "minimal", "default", "custom"
                 Custom configs: any name (will look for kind-{name}.yaml)
         kubernetes_version: Kubernetes version to use (e.g., "v1.34.0", default: latest)
+        addons: Optional list of add-on names to install (e.g., ["ingress"])
 
     Returns:
         Dict containing:
@@ -80,6 +89,7 @@ def create_cluster(
         - nodes: Number of nodes
         - kubeconfig_path: Path to kubeconfig file (if configured)
         - config_source: Description of which config was used
+        - addons_installed: Dict of addon installation results (if addons specified)
         - message: Success message
 
     Raises:
@@ -118,16 +128,39 @@ def create_cluster(
 
                 result["kubeconfig_path"] = str(kubeconfig_path)
                 logger.info(f"Kubeconfig saved to {kubeconfig_path}")
-            except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
+            except Exception as e:
                 logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
                 # Don't fail cluster creation if kubeconfig save fails
                 result["kubeconfig_path"] = None
 
         result["config_source"] = config_source
-        result["message"] = (
-            f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
-            f"using {config_source}"
-        )
+
+        # Install add-ons if specified (only if kubeconfig was saved successfully)
+        if addons and result.get("kubeconfig_path"):
+            logger.info(f"Installing {len(addons)} add-on(s): {', '.join(addons)}")
+            addon_manager = AddonManager(name, Path(result["kubeconfig_path"]))
+            addon_result = addon_manager.install_addons(addons)
+
+            result["addons_installed"] = addon_result
+
+            # Update message
+            if addon_result.get("success"):
+                result["message"] = (
+                    f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
+                    f"using {config_source}. {addon_result['message']}"
+                )
+            else:
+                result["message"] = (
+                    f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
+                    f"using {config_source}. Add-ons: {addon_result['message']}"
+                )
+                # Log warning but don't fail cluster creation
+                logger.warning(f"Some add-ons failed to install: {addon_result.get('failed', [])}")
+        else:
+            result["message"] = (
+                f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
+                f"using {config_source}"
+            )
 
         return result
 
