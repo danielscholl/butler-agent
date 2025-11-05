@@ -28,7 +28,9 @@ class IngressNginxAddon(BaseAddon):
     RELEASE_NAME = "ingress-nginx"
     DEPLOYMENT_NAME = "ingress-nginx-controller"
 
-    def __init__(self, cluster_name: str, kubeconfig_path: Path, config: dict[str, Any] | None = None):
+    def __init__(
+        self, cluster_name: str, kubeconfig_path: Path, config: dict[str, Any] | None = None
+    ):
         """Initialize NGINX Ingress addon.
 
         Args:
