@@ -1,13 +1,9 @@
 """Addon manager for orchestrating addon installations."""
 
+import importlib
 import logging
-import sys
 from pathlib import Path
 from typing import Any
-
-from agent.cluster.addons.ingress_nginx import (
-    IngressNginxAddon,  # noqa: F401 - needed for getattr lookup
-)
 
 logger = logging.getLogger(__name__)
 
@@ -24,19 +20,18 @@ class AddonManager:
         """
         self.cluster_name = cluster_name
         self.kubeconfig_path = kubeconfig_path
-        self._addon_registry: dict[str, str] = {}
+        self._addon_registry: dict[str, tuple[str, str]] = {}
         self._alias_map: dict[str, str] = {}
         self._register_addons()
 
     def _register_addons(self) -> None:
         """Register available addons.
 
-        Store class names instead of class objects so runtime patching works
-        even if this manager is instantiated before tests apply patches.
+        Store module paths and class names for dynamic import.
         """
-        # Registry keyed by canonical addon names
+        # Registry keyed by canonical addon names: (module_path, class_name)
         self._addon_registry = {
-            "ingress": "IngressNginxAddon",
+            "ingress": ("agent.cluster.addons.ingress_nginx", "IngressNginxAddon"),
         }
         # Alias map: user-provided names -> canonical registry key
         self._alias_map = {
@@ -74,8 +69,9 @@ class AddonManager:
         Returns:
             Addon instance
         """
-        addon_class_name = self._addon_registry[name]
-        addon_class = getattr(sys.modules[__name__], addon_class_name)
+        module_path, class_name = self._addon_registry[name]
+        module = importlib.import_module(module_path)
+        addon_class = getattr(module, class_name)
         return addon_class(self.cluster_name, self.kubeconfig_path, config)
 
     def install_addons(

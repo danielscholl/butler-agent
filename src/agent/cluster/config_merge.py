@@ -21,7 +21,8 @@ def merge_addon_requirements(
 
     Strategy:
     - containerdConfigPatches: APPEND all patches
-    - extraPortMappings: APPEND to control-plane node (dedupe by (containerPort, hostPort, protocol) tuple, with conflict detection for (hostPort, protocol))
+    - extraPortMappings: APPEND to control-plane node (dedupe by
+      (containerPort, hostPort, protocol) tuple, with conflict detection for (hostPort, protocol))
     - node labels: MERGE into kubeletExtraArgs.node-labels
     - networking: MERGE (log warnings on conflicts)
     - featureGates: MERGE (log warnings on conflicts)

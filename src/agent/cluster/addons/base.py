@@ -146,34 +146,35 @@ class BaseAddon(ABC):
     def get_cluster_config_requirements(self) -> dict[str, Any]:
         """Return cluster config patches needed before cluster creation.
 
-        **PRE-CREATION HOOK CONTRACT**:
-        This method is called BEFORE the cluster is created. It must:
-        - Return cluster configuration requirements ONLY (no side effects)
-        - NOT access kubeconfig or attempt cluster operations
-        - NOT access self.kubeconfig_path (it may not exist yet)
-        - Be deterministic and idempotent
+              **PRE-CREATION HOOK CONTRACT**:
+              This method is called BEFORE the cluster is created. It must:
+              - Return cluster configuration requirements ONLY (no side effects)
+              - NOT access kubeconfig or attempt cluster operations
+              - NOT access self.kubeconfig_path (it may not exist yet)
+              - Be deterministic and idempotent
 
-        This method is called during Phase 1 (pre-creation) of the two-phase addon
-        pattern. The returned requirements are merged into the cluster config before
-        the cluster is created.
+              This method is called during Phase 1 (pre-creation) of the two-phase addon
+              pattern. The returned requirements are merged into the cluster config before
+              the cluster is created.
 
-        Override this for addons that need cluster-level configuration like:
-        - containerd patches for container registries
-        - feature gates for alpha/beta Kubernetes features
-        - network configuration changes
+              Override this for addons that need cluster-level configuration like:
+              - containerd patches for container registries
+              - feature gates for alpha/beta Kubernetes features
+              - network configuration changes
 
-        Returns:
-            Dict with optional keys:
-            - containerdConfigPatches: list[str] - containerd config patches
-            - networking: dict - networking configuration overrides
-            - featureGates: dict[str, bool] - Kubernetes feature gates
+              Returns:
+                  Dict with optional keys:
+                  - containerdConfigPatches: list[str] - containerd config patches
+                  - networking: dict - networking configuration overrides
+                  - featureGates: dict[str, bool] - Kubernetes feature gates
 
-        Example:
-            {
-                "containerdConfigPatches": [
-                    '[plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]\\n  endpoint = ["http://registry:5000"]'
-                ]
-            }
+              Example:
+                  {
+                      "containerdConfigPatches": [
+                          '''[plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]
+        endpoint = ["http://registry:5000"]'''
+                      ]
+                  }
         """
         return {}
 

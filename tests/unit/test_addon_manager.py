@@ -55,7 +55,7 @@ def test_install_addons_empty_list(manager):
     assert "No addons specified" in result["message"]
 
 
-@patch("agent.cluster.addons.manager.IngressNginxAddon")
+@patch("agent.cluster.addons.ingress_nginx.IngressNginxAddon")
 def test_install_addons_success(mock_addon_class, manager):
     """Test successful addon installation."""
     mock_addon = MagicMock()
@@ -75,7 +75,7 @@ def test_install_addons_success(mock_addon_class, manager):
     assert "1/1 succeeded" in result["message"]
 
 
-@patch("agent.cluster.addons.manager.IngressNginxAddon")
+@patch("agent.cluster.addons.ingress_nginx.IngressNginxAddon")
 def test_install_addons_failure(mock_addon_class, manager):
     """Test addon installation failure."""
     mock_addon = MagicMock()
@@ -94,7 +94,7 @@ def test_install_addons_failure(mock_addon_class, manager):
     assert "1 failed" in result["message"]
 
 
-@patch("agent.cluster.addons.manager.IngressNginxAddon")
+@patch("agent.cluster.addons.ingress_nginx.IngressNginxAddon")
 def test_install_addons_already_installed(mock_addon_class, manager):
     """Test addon already installed."""
     mock_addon = MagicMock()
@@ -112,7 +112,7 @@ def test_install_addons_already_installed(mock_addon_class, manager):
     assert "1 already installed" in result["message"]
 
 
-@patch("agent.cluster.addons.manager.IngressNginxAddon")
+@patch("agent.cluster.addons.ingress_nginx.IngressNginxAddon")
 def test_install_multiple_addons(mock_addon_class, manager):
     """Test installing multiple addons."""
     mock_addon = MagicMock()
@@ -140,7 +140,7 @@ def test_install_addons_invalid_name(manager):
     assert "Invalid addon name" in result["results"]["invalid-addon"]["message"]
 
 
-@patch("agent.cluster.addons.manager.IngressNginxAddon")
+@patch("agent.cluster.addons.ingress_nginx.IngressNginxAddon")
 def test_install_addons_exception(mock_addon_class, manager):
     """Test addon installation with exception."""
     mock_addon = MagicMock()

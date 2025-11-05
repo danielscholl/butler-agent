@@ -168,7 +168,9 @@ def create_cluster(
                 )
 
         # Convert cluster config dict back to YAML string for kind_manager
-        # Use safe_dump for security; sort_keys=False preserves the original key order from the merged config dict (insertion order in Python 3.7+), making diffs more readable
+        # Use safe_dump for security.
+        # The argument sort_keys=False preserves the original key order from the merged config dict
+        # (insertion order in Python 3.7+), making diffs more readable.
         cluster_config_yaml = yaml.safe_dump(
             cluster_config, default_flow_style=False, sort_keys=False
         )
@@ -193,7 +195,7 @@ def create_cluster(
 
                 result["kubeconfig_path"] = str(kubeconfig_path)
                 logger.info(f"Kubeconfig saved to {kubeconfig_path}")
-            except Exception as e:
+            except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
                 logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
                 # Don't fail cluster creation if kubeconfig save fails
                 result["kubeconfig_path"] = None

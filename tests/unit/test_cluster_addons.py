@@ -50,7 +50,7 @@ def setup_tools(mock_config):
 @patch("agent.cluster.tools.Path.write_text")
 def test_create_cluster_without_addons(mock_write, mock_mkdir, mock_get_config, setup_tools):
     """Test cluster creation without add-ons."""
-    _ = setup_tools  # noqa: F841
+    # setup_tools fixture needed for its side effects (setting up mocks)
     mock_get_config.return_value = ("fake-config", "built-in default")
 
     result = create_cluster("test", "default")
@@ -69,7 +69,7 @@ def test_create_cluster_with_addons(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation with add-ons (two-phase pattern)."""
-    _ = setup_tools  # noqa: F841
+    # setup_tools fixture needed for its side effects (setting up mocks)
     mock_get_config.return_value = (
         "nodes:\n- role: control-plane\n",
         "built-in default",
@@ -226,7 +226,9 @@ def test_create_cluster_addon_without_kubeconfig(
     mock_addon_manager_class.return_value = mock_addon_manager
 
     # Make kubeconfig save fail
-    mocks["kind"].get_kubeconfig.side_effect = Exception("kubeconfig error")
+    from agent.utils.errors import KindCommandError
+
+    mocks["kind"].get_kubeconfig.side_effect = KindCommandError("kubeconfig error")
 
     with patch("agent.cluster.tools.logger"):
         result = create_cluster("test", "default", addons=["ingress"])
