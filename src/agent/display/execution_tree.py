@@ -442,6 +442,15 @@ class ExecutionTreeDisplay:
 
         self._running = True
 
+        # Clear any stale events from previous runs
+        self._event_emitter.clear()
+
+        # Reset display state for clean start
+        self._node_map.clear()
+        self._phases.clear()
+        self._current_phase = None
+        self._session_start_time = datetime.now()
+
         # Start Rich Live display with reasonable refresh rate
         # 10Hz (100ms) provides smooth updates without excessive CPU usage
         self._live = Live(

@@ -1,5 +1,6 @@
-"""Kubectl resource management operations."""
+"""Kubectl resource management operations with async subprocess support."""
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -8,6 +9,7 @@ from pathlib import Path
 
 import yaml
 
+from agent.utils.async_subprocess import run_async, AsyncCompletedProcess
 from agent.utils.errors import (
     ClusterNotFoundError,
     InvalidManifestError,
@@ -61,8 +63,8 @@ class KubectlManager:
         """
         return Path(f"./data/{cluster_name}/kubeconfig")
 
-    def _validate_kubeconfig(self, cluster_name: str) -> Path:
-        """Validate kubeconfig exists and cluster is accessible.
+    async def _validate_kubeconfig(self, cluster_name: str) -> Path:
+        """Validate kubeconfig exists and cluster is accessible asynchronously.
 
         Args:
             cluster_name: Cluster name
@@ -84,27 +86,27 @@ class KubectlManager:
 
         # Verify cluster is accessible
         try:
-            result = subprocess.run(
+            result = await run_async(
                 ["kubectl", "cluster-info", "--kubeconfig", str(kubeconfig_path)],
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
             if result.returncode != 0:
                 raise ClusterNotFoundError(
                     f"Cluster '{cluster_name}' is not accessible. It may be stopped or deleted. Try starting it first."
                 )
-        except subprocess.TimeoutExpired as e:
+        except asyncio.TimeoutError as e:
             raise ClusterNotFoundError(
                 f"Timeout connecting to cluster '{cluster_name}'. The cluster may be stopped."
             ) from e
 
         return kubeconfig_path
 
-    def _run_kubectl(
+    async def _run_kubectl(
         self, args: list[str], kubeconfig_path: Path, timeout: int = 30
-    ) -> subprocess.CompletedProcess[str]:
-        """Run kubectl command with kubeconfig.
+    ) -> AsyncCompletedProcess:
+        """Run kubectl command with kubeconfig asynchronously.
 
         Args:
             args: Command arguments
@@ -112,7 +114,7 @@ class KubectlManager:
             timeout: Command timeout in seconds
 
         Returns:
-            Completed subprocess
+            AsyncCompletedProcess
 
         Raises:
             KubectlCommandError: If command fails
@@ -121,27 +123,27 @@ class KubectlManager:
         logger.debug(f"Running kubectl command: {' '.join(cmd)}")
 
         try:
-            result = subprocess.run(
+            result = await run_async(
                 cmd,
-                capture_output=True,
-                text=True,
                 timeout=timeout,
+                check=False,
+                capture_output=True,
             )
             return result
 
-        except subprocess.TimeoutExpired as e:
+        except asyncio.TimeoutError as e:
             raise KubectlCommandError(f"kubectl command timed out after {timeout} seconds") from e
         except FileNotFoundError as e:
             raise KubectlCommandError("kubectl CLI not found in PATH") from e
 
-    def get_resources(
+    async def get_resources(
         self,
         cluster_name: str,
         resource_type: str,
         namespace: str = "default",
         label_selector: str | None = None,
     ) -> dict:
-        """Get Kubernetes resources by type.
+        """Get Kubernetes resources by type asynchronously.
 
         Args:
             cluster_name: Cluster name
@@ -157,14 +159,14 @@ class KubectlManager:
             ClusterNotFoundError: If cluster not accessible
             KubectlCommandError: If kubectl command fails
         """
-        kubeconfig_path = self._validate_kubeconfig(cluster_name)
+        kubeconfig_path = await self._validate_kubeconfig(cluster_name)
 
         # Build command
         args = ["get", resource_type, "-n", namespace, "-o", "json"]
         if label_selector:
             args.extend(["-l", label_selector])
 
-        result = self._run_kubectl(args, kubeconfig_path)
+        result = await self._run_kubectl(args, kubeconfig_path)
 
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout
@@ -194,13 +196,13 @@ class KubectlManager:
         except json.JSONDecodeError as e:
             raise KubectlCommandError(f"Failed to parse kubectl output as JSON: {e}") from e
 
-    def apply_manifest(
+    async def apply_manifest(
         self,
         cluster_name: str,
         manifest: str,
         namespace: str = "default",
     ) -> dict:
-        """Apply Kubernetes manifest to cluster.
+        """Apply Kubernetes manifest to cluster asynchronously.
 
         Args:
             cluster_name: Cluster name
@@ -216,7 +218,7 @@ class KubectlManager:
             InvalidManifestError: If manifest is invalid
             KubectlCommandError: If kubectl command fails
         """
-        kubeconfig_path = self._validate_kubeconfig(cluster_name)
+        kubeconfig_path = await self._validate_kubeconfig(cluster_name)
 
         # Validate manifest is valid YAML
         try:
@@ -233,7 +235,7 @@ class KubectlManager:
 
             # Apply manifest
             args = ["apply", "-f", temp_file, "-n", namespace]
-            result = self._run_kubectl(args, kubeconfig_path, timeout=60)
+            result = await self._run_kubectl(args, kubeconfig_path, timeout=60)
 
             if result.returncode != 0:
                 error_msg = result.stderr or result.stdout
@@ -263,7 +265,7 @@ class KubectlManager:
             if temp_file:
                 Path(temp_file).unlink(missing_ok=True)
 
-    def delete_resource(
+    async def delete_resource(
         self,
         cluster_name: str,
         resource_type: str,
@@ -271,7 +273,7 @@ class KubectlManager:
         namespace: str = "default",
         force: bool = False,
     ) -> dict:
-        """Delete a Kubernetes resource.
+        """Delete a Kubernetes resource asynchronously.
 
         Args:
             cluster_name: Cluster name
@@ -288,14 +290,14 @@ class KubectlManager:
             ClusterNotFoundError: If cluster not accessible
             KubectlCommandError: If kubectl command fails
         """
-        kubeconfig_path = self._validate_kubeconfig(cluster_name)
+        kubeconfig_path = await self._validate_kubeconfig(cluster_name)
 
         # Build command
         args = ["delete", resource_type, name, "-n", namespace]
         if force:
             args.extend(["--grace-period=0", "--force"])
 
-        result = self._run_kubectl(args, kubeconfig_path, timeout=60)
+        result = await self._run_kubectl(args, kubeconfig_path, timeout=60)
 
         # Resource not found is not an error (idempotent delete)
         if result.returncode != 0:
@@ -333,7 +335,7 @@ class KubectlManager:
             "message": f"Successfully deleted {resource_type}/{name}",
         }
 
-    def get_logs(
+    async def get_logs(
         self,
         cluster_name: str,
         pod_name: str,
@@ -342,7 +344,7 @@ class KubectlManager:
         tail_lines: int = 100,
         previous: bool = False,
     ) -> dict:
-        """Get logs from a pod.
+        """Get logs from a pod asynchronously.
 
         Args:
             cluster_name: Cluster name
@@ -361,7 +363,7 @@ class KubectlManager:
             ResourceNotFoundError: If pod not found
             KubectlCommandError: If kubectl command fails
         """
-        kubeconfig_path = self._validate_kubeconfig(cluster_name)
+        kubeconfig_path = await self._validate_kubeconfig(cluster_name)
 
         # Build command
         args = ["logs", pod_name, "-n", namespace, f"--tail={tail_lines}"]
@@ -370,7 +372,7 @@ class KubectlManager:
         if previous:
             args.append("--previous")
 
-        result = self._run_kubectl(args, kubeconfig_path, timeout=30)
+        result = await self._run_kubectl(args, kubeconfig_path, timeout=30)
 
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout
@@ -399,14 +401,14 @@ class KubectlManager:
             "lines": len(log_lines),
         }
 
-    def describe_resource(
+    async def describe_resource(
         self,
         cluster_name: str,
         resource_type: str,
         name: str,
         namespace: str = "default",
     ) -> dict:
-        """Describe a Kubernetes resource.
+        """Describe a Kubernetes resource asynchronously.
 
         Args:
             cluster_name: Cluster name
@@ -423,12 +425,12 @@ class KubectlManager:
             ResourceNotFoundError: If resource not found
             KubectlCommandError: If kubectl command fails
         """
-        kubeconfig_path = self._validate_kubeconfig(cluster_name)
+        kubeconfig_path = await self._validate_kubeconfig(cluster_name)
 
         # Build command
         args = ["describe", resource_type, name, "-n", namespace]
 
-        result = self._run_kubectl(args, kubeconfig_path, timeout=30)
+        result = await self._run_kubectl(args, kubeconfig_path, timeout=30)
 
         if result.returncode != 0:
             error_msg = result.stderr or result.stdout

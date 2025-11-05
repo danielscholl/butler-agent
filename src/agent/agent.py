@@ -184,7 +184,9 @@ Your goal is to make Kubernetes infrastructure management simple and conversatio
             if thread is None:
                 thread = self.get_new_thread()
 
+            logger.debug("Calling agent.run()...")
             response = await self.agent.run(query, thread=thread)
+            logger.debug(f"agent.run() returned, type: {type(response)}")
             logger.info("Query processed successfully")
 
             # Extract message content from response

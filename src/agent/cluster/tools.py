@@ -116,11 +116,66 @@ async def create_cluster(
         # PHASE 1: Collect and merge addon configuration requirements (pre-cluster creation)
         if addons:
             from agent.cluster.config_merge import merge_addon_requirements
+            from agent.utils.port_checker import check_ingress_ports
 
             logger.info(f"Collecting configuration requirements from {len(addons)} addon(s)")
 
             # Temporary addon manager to get addon classes (no kubeconfig yet)
             temp_manager = AddonManager(name, Path("/tmp/placeholder"))
+
+            # Check for ingress addon and port conflicts BEFORE expensive operations
+            has_ingress = any(
+                addon.lower() in ["ingress", "ingress-nginx", "nginx"] for addon in addons
+            )
+            if has_ingress:
+                logger.info("Checking ingress port availability (80, 443)")
+                port_status = check_ingress_ports()
+
+                if not port_status["available"]:
+                    conflicting_cluster = port_status.get("conflicting_cluster")
+                    conflicts = port_status.get("conflicts", [])
+
+                    # Build detailed error message for LLM to present naturally
+                    conflict_details = []
+                    for c in conflicts:
+                        port_num = c["port"]
+                        if c.get("cluster_name"):
+                            conflict_details.append(
+                                f"Port {port_num} is in use by Kind cluster '{c['cluster_name']}'"
+                            )
+                        elif c.get("container"):
+                            conflict_details.append(
+                                f"Port {port_num} is in use by Docker container '{c['container']}'"
+                            )
+                        else:
+                            conflict_details.append(f"Port {port_num} is in use")
+
+                    logger.warning(
+                        f"Port conflict detected for ingress addon: {'; '.join(conflict_details)}"
+                    )
+
+                    # Build clear, actionable error message
+                    if conflicting_cluster:
+                        error_msg = (
+                            f"Cannot create cluster '{name}' with ingress: "
+                            f"ports 80/443 are in use by existing cluster '{conflicting_cluster}'. "
+                            f"Options: (1) Delete '{conflicting_cluster}' first, "
+                            f"(2) Create '{name}' without ingress addon, or "
+                            f"(3) Use alternative ports like 8080/8443."
+                        )
+                    else:
+                        error_msg = (
+                            f"Cannot create cluster '{name}' with ingress: "
+                            f"ports 80/443 are already in use. "
+                            f"Free the ports or create without ingress addon."
+                        )
+
+                    return {
+                        "success": False,
+                        "error": "ingress_port_conflict",
+                        "conflicting_cluster": conflicting_cluster,
+                        "message": error_msg,
+                    }
 
             addon_requirements = []
             for addon_name in addons:
@@ -631,7 +686,7 @@ async def restart_cluster(name: str) -> dict[str, Any]:
         }
 
 
-def kubectl_get_resources(
+async def kubectl_get_resources(
     cluster_name: str,
     resource_type: str,
     namespace: str = "default",
@@ -680,7 +735,7 @@ def kubectl_get_resources(
             f"Getting {resource_type} from cluster '{cluster_name}', namespace '{namespace}'"
         )
 
-        result = _kubectl_manager.get_resources(
+        result = await _kubectl_manager.get_resources(
             cluster_name, resource_type, namespace, label_selector
         )
 
@@ -712,7 +767,7 @@ def kubectl_get_resources(
         }
 
 
-def kubectl_apply(
+async def kubectl_apply(
     cluster_name: str,
     manifest: str,
     namespace: str = "default",
@@ -747,7 +802,7 @@ def kubectl_apply(
     try:
         logger.info(f"Applying manifest to cluster '{cluster_name}', namespace '{namespace}'")
 
-        result = _kubectl_manager.apply_manifest(cluster_name, manifest, namespace)
+        result = await _kubectl_manager.apply_manifest(cluster_name, manifest, namespace)
 
         result["message"] = (
             f"Successfully applied {len(result['resources'])} resource(s) to "
@@ -783,7 +838,7 @@ def kubectl_apply(
         }
 
 
-def kubectl_delete(
+async def kubectl_delete(
     cluster_name: str,
     resource_type: str,
     name: str,
@@ -825,7 +880,7 @@ def kubectl_delete(
             f"namespace '{namespace}'"
         )
 
-        result = _kubectl_manager.delete_resource(
+        result = await _kubectl_manager.delete_resource(
             cluster_name, resource_type, name, namespace, force
         )
 
@@ -854,7 +909,7 @@ def kubectl_delete(
         }
 
 
-def kubectl_logs(
+async def kubectl_logs(
     cluster_name: str,
     pod_name: str,
     namespace: str = "default",
@@ -896,7 +951,7 @@ def kubectl_logs(
     try:
         logger.info(f"Getting logs from pod '{pod_name}' in cluster '{cluster_name}'")
 
-        result = _kubectl_manager.get_logs(
+        result = await _kubectl_manager.get_logs(
             cluster_name, pod_name, namespace, container, tail_lines, previous
         )
 
@@ -934,7 +989,7 @@ def kubectl_logs(
         }
 
 
-def kubectl_describe(
+async def kubectl_describe(
     cluster_name: str,
     resource_type: str,
     name: str,
@@ -975,7 +1030,7 @@ def kubectl_describe(
             f"namespace '{namespace}'"
         )
 
-        result = _kubectl_manager.describe_resource(cluster_name, resource_type, name, namespace)
+        result = await _kubectl_manager.describe_resource(cluster_name, resource_type, name, namespace)
 
         result["message"] = (
             f"Retrieved description for {resource_type}/{name} in cluster '{cluster_name}', "

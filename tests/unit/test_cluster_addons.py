@@ -1,6 +1,6 @@
 """Tests for create_cluster addon integration."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -27,15 +27,17 @@ def setup_tools(mock_config):
         patch("agent.cluster.tools._config", mock_config),
     ):
 
-        # Setup mock kind manager
-        mock_kind.create_cluster.return_value = {
-            "cluster_name": "test",
-            "status": "running",
-            "nodes": 2,
-            "kubernetes_version": "v1.34.0",
-        }
-        mock_kind.get_kubeconfig.return_value = "fake-kubeconfig"
-        mock_kind.cluster_exists.return_value = False
+        # Setup mock kind manager with async methods
+        mock_kind.create_cluster = AsyncMock(
+            return_value={
+                "cluster_name": "test",
+                "status": "running",
+                "nodes": 2,
+                "kubernetes_version": "v1.34.0",
+            }
+        )
+        mock_kind.get_kubeconfig = AsyncMock(return_value="fake-kubeconfig")
+        mock_kind.cluster_exists = AsyncMock(return_value=False)
 
         yield {
             "kind": mock_kind,
@@ -45,15 +47,16 @@ def setup_tools(mock_config):
         }
 
 
+@pytest.mark.asyncio
 @patch("agent.cluster.tools.get_cluster_config")
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
-def test_create_cluster_without_addons(mock_write, mock_mkdir, mock_get_config, setup_tools):
+async def test_create_cluster_without_addons(mock_write, mock_mkdir, mock_get_config, setup_tools):
     """Test cluster creation without add-ons."""
     # setup_tools fixture needed for its side effects (setting up mocks)
     mock_get_config.return_value = ("fake-config", "built-in default")
 
-    result = create_cluster("test", "default")
+    result = await create_cluster("test", "default")
 
     assert result.get("cluster_name") == "test"
     assert result.get("status") == "running"
@@ -61,11 +64,12 @@ def test_create_cluster_without_addons(mock_write, mock_mkdir, mock_get_config, 
     assert "created successfully" in result.get("message", "")
 
 
+@pytest.mark.asyncio
 @patch("agent.cluster.tools.get_cluster_config")
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
-def test_create_cluster_with_addons(
+async def test_create_cluster_with_addons(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation with add-ons (two-phase pattern)."""
@@ -87,17 +91,19 @@ def test_create_cluster_with_addons(
     mock_addon_instance.get_node_labels.return_value = {}
     mock_addon_manager.get_addon_instance.return_value = mock_addon_instance
 
-    # Phase 2: Installation
-    mock_addon_manager.install_addons.return_value = {
-        "success": True,
-        "results": {"ingress": {"success": True, "message": "Installed"}},
-        "failed": [],
-        "message": "Addons: 1/1 succeeded",
-    }
+    # Phase 2: Installation (async method)
+    mock_addon_manager.install_addons = AsyncMock(
+        return_value={
+            "success": True,
+            "results": {"ingress": {"success": True, "message": "Installed"}},
+            "failed": [],
+            "message": "Addons: 1/1 succeeded",
+        }
+    )
 
     mock_addon_manager_class.return_value = mock_addon_manager
 
-    result = create_cluster("test", "default", addons=["ingress"])
+    result = await create_cluster("test", "default", addons=["ingress"])
 
     assert result.get("cluster_name") == "test"
     assert "addons_installed" in result
@@ -109,11 +115,12 @@ def test_create_cluster_with_addons(
     mock_addon_manager.install_addons.assert_called_once_with(["ingress"])
 
 
+@pytest.mark.asyncio
 @patch("agent.cluster.tools.get_cluster_config")
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
-def test_create_cluster_addon_failure(
+async def test_create_cluster_addon_failure(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation when addon fails (cluster should still succeed)."""
@@ -134,16 +141,18 @@ def test_create_cluster_addon_failure(
     mock_addon_instance.get_node_labels.return_value = {}
     mock_addon_manager.get_addon_instance.return_value = mock_addon_instance
 
-    # Phase 2: Installation with failure
-    mock_addon_manager.install_addons.return_value = {
-        "success": False,
-        "results": {"ingress": {"success": False, "error": "Install failed"}},
-        "failed": ["ingress"],
-        "message": "Addons: 0/1 succeeded, 1 failed: ingress",
-    }
+    # Phase 2: Installation with failure (async method)
+    mock_addon_manager.install_addons = AsyncMock(
+        return_value={
+            "success": False,
+            "results": {"ingress": {"success": False, "error": "Install failed"}},
+            "failed": ["ingress"],
+            "message": "Addons: 0/1 succeeded, 1 failed: ingress",
+        }
+    )
     mock_addon_manager_class.return_value = mock_addon_manager
 
-    result = create_cluster("test", "default", addons=["ingress"])
+    result = await create_cluster("test", "default", addons=["ingress"])
 
     # Cluster creation should succeed
     assert result.get("cluster_name") == "test"
@@ -154,11 +163,12 @@ def test_create_cluster_addon_failure(
     assert "ingress" in result["addons_installed"]["failed"]
 
 
+@pytest.mark.asyncio
 @patch("agent.cluster.tools.get_cluster_config")
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
-def test_create_cluster_multiple_addons(
+async def test_create_cluster_multiple_addons(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation with multiple add-ons."""
@@ -182,29 +192,32 @@ def test_create_cluster_multiple_addons(
     mock_addon_instance.get_node_labels.return_value = {}
     mock_addon_manager.get_addon_instance.return_value = mock_addon_instance
 
-    # Phase 2: Installation with multiple addons
-    mock_addon_manager.install_addons.return_value = {
-        "success": True,
-        "results": {
-            "ingress": {"success": True, "message": "Installed"},
-            "registry": {"success": True, "skipped": True, "message": "Already installed"},
-        },
-        "failed": [],
-        "message": "Addons: 2/2 succeeded, 1 already installed",
-    }
+    # Phase 2: Installation with multiple addons (async method)
+    mock_addon_manager.install_addons = AsyncMock(
+        return_value={
+            "success": True,
+            "results": {
+                "ingress": {"success": True, "message": "Installed"},
+                "registry": {"success": True, "skipped": True, "message": "Already installed"},
+            },
+            "failed": [],
+            "message": "Addons: 2/2 succeeded, 1 already installed",
+        }
+    )
     mock_addon_manager_class.return_value = mock_addon_manager
 
-    result = create_cluster("test", "default", addons=["ingress", "registry"])
+    result = await create_cluster("test", "default", addons=["ingress", "registry"])
 
     assert result["addons_installed"]["success"] is True
     assert len(result["addons_installed"]["results"]) == 2
 
 
+@pytest.mark.asyncio
 @patch("agent.cluster.tools.get_cluster_config")
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
-def test_create_cluster_addon_without_kubeconfig(
+async def test_create_cluster_addon_without_kubeconfig(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test that addons are skipped if kubeconfig is not saved."""
@@ -231,7 +244,7 @@ def test_create_cluster_addon_without_kubeconfig(
     mocks["kind"].get_kubeconfig.side_effect = KindCommandError("kubeconfig error")
 
     with patch("agent.cluster.tools.logger"):
-        result = create_cluster("test", "default", addons=["ingress"])
+        result = await create_cluster("test", "default", addons=["ingress"])
 
         # Cluster should succeed
         assert result.get("cluster_name") == "test"
