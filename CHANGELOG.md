@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.6...butler-agent-v0.1.7) (2025-11-05)
+
+
+### Bug Fixes
+
+* address code review feedback for status branch ([#23](https://github.com/danielscholl/butler-agent/issues/23)) ([619d2de](https://github.com/danielscholl/butler-agent/commit/619d2ded75a2aad7a80a4c754e867f8b72b6701d))
+
 ## [0.1.6](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.5...butler-agent-v0.1.6) (2025-11-05)
 
 
