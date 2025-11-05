@@ -1,11 +1,13 @@
 """NGINX Ingress Controller addon."""
 
+import asyncio
 import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from agent.cluster.addons.base import BaseAddon
+from agent.utils.async_subprocess import run_async
 from agent.utils.errors import HelmCommandError
 
 
@@ -65,8 +67,8 @@ class IngressNginxAddon(BaseAddon):
         """
         return {"ingress-ready": "true"}
 
-    def check_prerequisites(self) -> bool:
-        """Check if prerequisites are met.
+    async def check_prerequisites(self) -> bool:
+        """Check if prerequisites are met asynchronously.
 
         Returns:
             True if prerequisites are met
@@ -76,12 +78,12 @@ class IngressNginxAddon(BaseAddon):
             env = os.environ.copy()
             env["KUBECONFIG"] = str(self.kubeconfig_path)
 
-            result = subprocess.run(
+            result = await run_async(
                 ["kubectl", "cluster-info"],
                 env=env,
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
             if result.returncode != 0:
                 self.log_error("Cluster is not accessible via kubectl")
@@ -92,11 +94,11 @@ class IngressNginxAddon(BaseAddon):
 
         # Check if helm is available
         try:
-            subprocess.run(
+            await run_async(
                 ["helm", "version"],
-                capture_output=True,
                 timeout=10,
                 check=True,
+                capture_output=True,
             )
         except FileNotFoundError:
             self.log_error("helm CLI not found. Please install helm")
@@ -107,15 +109,15 @@ class IngressNginxAddon(BaseAddon):
 
         return True
 
-    def is_installed(self) -> bool:
-        """Check if NGINX Ingress is already installed.
+    async def is_installed(self) -> bool:
+        """Check if NGINX Ingress is already installed asynchronously.
 
         Returns:
             True if already installed
         """
         # Check via Helm release
         try:
-            result = self._run_helm(
+            result = await self._run_helm(
                 ["list", "-n", self.namespace, "-q"],
                 check=False,
             )
@@ -131,7 +133,7 @@ class IngressNginxAddon(BaseAddon):
             env = os.environ.copy()
             env["KUBECONFIG"] = str(self.kubeconfig_path)
 
-            result = subprocess.run(
+            result = await run_async(
                 [
                     "kubectl",
                     "get",
@@ -141,9 +143,9 @@ class IngressNginxAddon(BaseAddon):
                     self.namespace,
                 ],
                 env=env,
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
             if result.returncode == 0:
                 self.log_info("Detected via kubectl deployment")
@@ -154,15 +156,15 @@ class IngressNginxAddon(BaseAddon):
 
         return False
 
-    def install(self) -> dict[str, Any]:
-        """Install NGINX Ingress Controller.
+    async def install(self) -> dict[str, Any]:
+        """Install NGINX Ingress Controller asynchronously.
 
         Returns:
             Installation result dict
         """
         try:
             # Add Helm repository
-            self._add_helm_repo(self.HELM_REPO_NAME, self.HELM_REPO_URL)
+            await self._add_helm_repo(self.HELM_REPO_NAME, self.HELM_REPO_URL)
 
             # Prepare Helm values for Kind cluster
             # Note: Port mappings and node labels are handled in cluster config (pre-creation)
@@ -180,7 +182,7 @@ class IngressNginxAddon(BaseAddon):
             values.update(self.custom_values)
 
             # Install via Helm
-            self._helm_install(
+            await self._helm_install(
                 release_name=self.RELEASE_NAME,
                 chart=self.HELM_CHART,
                 namespace=self.namespace,
@@ -206,8 +208,8 @@ class IngressNginxAddon(BaseAddon):
                 "message": f"Installation failed: {e}",
             }
 
-    def wait_for_ready(self, timeout: int = 120) -> bool:
-        """Wait for NGINX Ingress Controller to be ready.
+    async def wait_for_ready(self, timeout: int = 120) -> bool:
+        """Wait for NGINX Ingress Controller to be ready asynchronously.
 
         Args:
             timeout: Timeout in seconds
@@ -221,7 +223,7 @@ class IngressNginxAddon(BaseAddon):
             env = os.environ.copy()
             env["KUBECONFIG"] = str(self.kubeconfig_path)
 
-            result = subprocess.run(
+            result = await run_async(
                 [
                     "kubectl",
                     "wait",
@@ -232,9 +234,9 @@ class IngressNginxAddon(BaseAddon):
                     f"--timeout={timeout}s",
                 ],
                 env=env,
-                capture_output=True,
-                text=True,
                 timeout=timeout + 10,
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode == 0:
@@ -244,15 +246,15 @@ class IngressNginxAddon(BaseAddon):
                 self.log_warn(f"Wait failed: {result.stderr}")
                 return False
 
-        except subprocess.TimeoutExpired:
+        except asyncio.TimeoutError:
             self.log_warn(f"Timeout waiting for deployment (>{timeout}s)")
             return False
         except Exception as e:
             self.log_warn(f"Error waiting for deployment: {e}")
             return False
 
-    def verify(self) -> bool:
-        """Verify NGINX Ingress Controller is functioning.
+    async def verify(self) -> bool:
+        """Verify NGINX Ingress Controller is functioning asynchronously.
 
         Returns:
             True if verification passes
@@ -262,7 +264,7 @@ class IngressNginxAddon(BaseAddon):
             env = os.environ.copy()
             env["KUBECONFIG"] = str(self.kubeconfig_path)
 
-            result = subprocess.run(
+            result = await run_async(
                 [
                     "kubectl",
                     "get",
@@ -271,9 +273,9 @@ class IngressNginxAddon(BaseAddon):
                     "name",
                 ],
                 env=env,
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
 
             if "ingress-nginx-admission" in result.stdout:

@@ -1,5 +1,6 @@
 """Base addon class for all cluster add-ons."""
 
+import asyncio
 import logging
 import os
 import subprocess
@@ -7,6 +8,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from agent.utils.async_subprocess import run_async, AsyncCompletedProcess
 from agent.utils.errors import HelmCommandError
 
 logger = logging.getLogger(__name__)
@@ -45,14 +47,14 @@ class BaseAddon(ABC):
         """Log error message with addon prefix."""
         logger.error(f"[{self.addon_name}] {message}")
 
-    def _run_helm(
+    async def _run_helm(
         self,
         args: list[str],
         check: bool = True,
         capture_output: bool = True,
         timeout: int = 120,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run helm command with kubeconfig.
+    ) -> AsyncCompletedProcess:
+        """Run helm command with kubeconfig asynchronously.
 
         Args:
             args: Helm command arguments
@@ -61,7 +63,7 @@ class BaseAddon(ABC):
             timeout: Command timeout in seconds
 
         Returns:
-            CompletedProcess result
+            AsyncCompletedProcess result
 
         Raises:
             HelmCommandError: If command fails and check=True
@@ -73,13 +75,12 @@ class BaseAddon(ABC):
             env = os.environ.copy()
             env["KUBECONFIG"] = str(self.kubeconfig_path)
 
-            result = subprocess.run(
+            result = await run_async(
                 cmd,
-                capture_output=capture_output,
-                text=True,
-                timeout=timeout,
                 env=env,
+                timeout=timeout,
                 check=False,
+                capture_output=capture_output,
             )
 
             if check and result.returncode != 0:
@@ -88,25 +89,25 @@ class BaseAddon(ABC):
 
             return result
 
-        except subprocess.TimeoutExpired as e:
+        except asyncio.TimeoutError as e:
             raise HelmCommandError(f"Helm command timed out after {timeout} seconds") from e
         except FileNotFoundError as e:
             raise HelmCommandError(
                 "helm CLI not found. Please install helm: https://helm.sh/docs/intro/install/"
             ) from e
 
-    def _add_helm_repo(self, name: str, url: str) -> None:
-        """Add or update a Helm repository.
+    async def _add_helm_repo(self, name: str, url: str) -> None:
+        """Add or update a Helm repository asynchronously.
 
         Args:
             name: Repository name
             url: Repository URL
         """
         self.log_info(f"Adding Helm repository: {name}")
-        self._run_helm(["repo", "add", name, url], check=False)
-        self._run_helm(["repo", "update"], check=False)
+        await self._run_helm(["repo", "add", name, url], check=False)
+        await self._run_helm(["repo", "update"], check=False)
 
-    def _helm_install(
+    async def _helm_install(
         self,
         release_name: str,
         chart: str,
@@ -114,7 +115,7 @@ class BaseAddon(ABC):
         values: dict[str, Any] | None = None,
         version: str | None = None,
     ) -> None:
-        """Install a Helm chart.
+        """Install a Helm chart asynchronously.
 
         Args:
             release_name: Name for the Helm release
@@ -141,7 +142,7 @@ class BaseAddon(ABC):
                 cmd_args.extend(["--set", f"{key}={value}"])
 
         self.log_info(f"Installing Helm chart: {chart}")
-        self._run_helm(cmd_args, timeout=300)  # 5 minute timeout for installation
+        await self._run_helm(cmd_args, timeout=300)  # 5 minute timeout for installation
 
     def get_cluster_config_requirements(self) -> dict[str, Any]:
         """Return cluster config patches needed before cluster creation.
@@ -229,7 +230,7 @@ class BaseAddon(ABC):
         return {}
 
     @abstractmethod
-    def check_prerequisites(self) -> bool:
+    async def check_prerequisites(self) -> bool:
         """Check if prerequisites for addon installation are met.
 
         Returns:
@@ -238,7 +239,7 @@ class BaseAddon(ABC):
         pass
 
     @abstractmethod
-    def is_installed(self) -> bool:
+    async def is_installed(self) -> bool:
         """Check if addon is already installed.
 
         Returns:
@@ -247,8 +248,8 @@ class BaseAddon(ABC):
         pass
 
     @abstractmethod
-    def install(self) -> dict[str, Any]:
-        """Install the addon.
+    async def install(self) -> dict[str, Any]:
+        """Install the addon asynchronously.
 
         Returns:
             Dict with installation result:
@@ -258,8 +259,8 @@ class BaseAddon(ABC):
         """
         pass
 
-    def wait_for_ready(self, timeout: int = 120) -> bool:
-        """Wait for addon to be ready.
+    async def wait_for_ready(self, timeout: int = 120) -> bool:
+        """Wait for addon to be ready asynchronously.
 
         Args:
             timeout: Timeout in seconds
@@ -270,8 +271,8 @@ class BaseAddon(ABC):
         # Default implementation - subclasses can override
         return True
 
-    def verify(self) -> bool:
-        """Verify addon is functioning correctly.
+    async def verify(self) -> bool:
+        """Verify addon is functioning correctly asynchronously.
 
         Returns:
             True if addon is verified, False otherwise
@@ -279,8 +280,8 @@ class BaseAddon(ABC):
         # Default implementation - subclasses can override
         return True
 
-    def run(self) -> dict[str, Any]:
-        """Run the complete addon installation flow with progress tracking.
+    async def run(self) -> dict[str, Any]:
+        """Run the complete addon installation flow with progress tracking asynchronously.
 
         Returns:
             Dict with installation result
@@ -296,7 +297,7 @@ class BaseAddon(ABC):
         parent_id = getattr(self, "_parent_event_id", None)
 
         # Check prerequisites
-        if not self.check_prerequisites():
+        if not await self.check_prerequisites():
             return {
                 "success": False,
                 "addon": self.addon_name,
@@ -305,7 +306,7 @@ class BaseAddon(ABC):
             }
 
         # Check if already installed
-        if self.is_installed():
+        if await self.is_installed():
             self.log_info("Already installed, skipping")
             return {
                 "success": True,
@@ -328,7 +329,7 @@ class BaseAddon(ABC):
 
         # Install
         try:
-            result = self.install()
+            result = await self.install()
             if not result.get("success"):
                 # Emit error event
                 duration = time.time() - start_time
@@ -356,7 +357,7 @@ class BaseAddon(ABC):
                 get_event_emitter().emit(wait_event)
 
             # Wait for ready
-            if not self.wait_for_ready():
+            if not await self.wait_for_ready():
                 self.log_warn("Addon installed but not ready within timeout")
                 duration = time.time() - start_time
                 if should_show_visualization() and addon_event_id:
@@ -377,7 +378,7 @@ class BaseAddon(ABC):
                 }
 
             # Verify
-            if not self.verify():
+            if not await self.verify():
                 self.log_warn("Addon verification failed")
                 duration = time.time() - start_time
                 if should_show_visualization() and addon_event_id:

@@ -49,7 +49,7 @@ def initialize_tools(config: AgentConfig) -> None:
     _cluster_status = ClusterStatus()
 
 
-def create_cluster(
+async def create_cluster(
     name: str,
     config: str = "default",
     kubernetes_version: str | None = None,
@@ -181,7 +181,7 @@ def create_cluster(
         )
 
         # Create cluster with merged configuration
-        result = _kind_manager.create_cluster(name, cluster_config_yaml, k8s_version)
+        result = await _kind_manager.create_cluster(name, cluster_config_yaml, k8s_version)
 
         # Export and save kubeconfig if data directory is configured
         if _config:
@@ -190,7 +190,7 @@ def create_cluster(
                 kubeconfig_path.parent.mkdir(parents=True, exist_ok=True)
 
                 # Export kubeconfig from kind
-                kubeconfig_content = _kind_manager.get_kubeconfig(name)
+                kubeconfig_content = await _kind_manager.get_kubeconfig(name)
                 kubeconfig_path.write_text(kubeconfig_content)
 
                 result["kubeconfig_path"] = str(kubeconfig_path)
@@ -206,7 +206,7 @@ def create_cluster(
         if addons and result.get("kubeconfig_path"):
             logger.info(f"Installing {len(addons)} add-on(s): {', '.join(addons)}")
             addon_manager = AddonManager(name, Path(result["kubeconfig_path"]))
-            addon_result = addon_manager.install_addons(addons)
+            addon_result = await addon_manager.install_addons(addons)
 
             result["addons_installed"] = addon_result
 
@@ -258,7 +258,7 @@ def create_cluster(
         }
 
 
-def delete_cluster(name: str, preserve_data: bool = True) -> dict[str, Any]:
+async def delete_cluster(name: str, preserve_data: bool = True) -> dict[str, Any]:
     """Delete a KinD cluster.
 
     This tool deletes an existing KinD cluster. The cluster and all its resources
@@ -283,7 +283,7 @@ def delete_cluster(name: str, preserve_data: bool = True) -> dict[str, Any]:
     try:
         logger.info(f"Deleting cluster '{name}' (preserve_data={preserve_data})")
 
-        result = _kind_manager.delete_cluster(name)
+        result = await _kind_manager.delete_cluster(name)
 
         # TODO: Handle data directory cleanup if preserve_data=False
 
@@ -310,7 +310,7 @@ def delete_cluster(name: str, preserve_data: bool = True) -> dict[str, Any]:
         }
 
 
-def list_clusters() -> dict[str, Any]:
+async def list_clusters() -> dict[str, Any]:
     """List all KinD clusters.
 
     This tool lists all existing KinD clusters on the system.
@@ -327,7 +327,7 @@ def list_clusters() -> dict[str, Any]:
     try:
         logger.info("Listing all clusters")
 
-        clusters = _kind_manager.list_clusters()
+        clusters = await _kind_manager.list_clusters()
 
         return {
             "clusters": clusters,
@@ -354,7 +354,7 @@ def list_clusters() -> dict[str, Any]:
         }
 
 
-def cluster_status(name: str) -> dict[str, Any]:
+async def cluster_status(name: str) -> dict[str, Any]:
     """Get detailed status for a cluster.
 
     This tool provides comprehensive status information about a cluster including
@@ -383,7 +383,7 @@ def cluster_status(name: str) -> dict[str, Any]:
         logger.info(f"Getting status for cluster '{name}'")
 
         # Check if cluster exists
-        if not _kind_manager.cluster_exists(name):
+        if not await _kind_manager.cluster_exists(name):
             return {
                 "success": False,
                 "error": f"Cluster '{name}' not found",
@@ -448,7 +448,7 @@ def get_cluster_health(name: str) -> dict[str, Any]:
         }
 
 
-def start_cluster(name: str) -> dict[str, Any]:
+async def start_cluster(name: str) -> dict[str, Any]:
     """Start a stopped KinD cluster.
 
     This tool starts a previously stopped cluster without recreating it.
@@ -476,7 +476,7 @@ def start_cluster(name: str) -> dict[str, Any]:
     try:
         logger.info(f"Starting cluster '{name}'")
 
-        result = _kind_manager.start_cluster(name)
+        result = await _kind_manager.start_cluster(name)
         result["message"] = (
             f"Cluster '{name}' started successfully in {result['startup_time_seconds']} seconds"
         )
@@ -510,7 +510,7 @@ def start_cluster(name: str) -> dict[str, Any]:
         }
 
 
-def stop_cluster(name: str) -> dict[str, Any]:
+async def stop_cluster(name: str) -> dict[str, Any]:
     """Stop a running KinD cluster without deleting it.
 
     This tool stops a cluster to save resources while preserving all data
@@ -540,7 +540,7 @@ def stop_cluster(name: str) -> dict[str, Any]:
     try:
         logger.info(f"Stopping cluster '{name}'")
 
-        result = _kind_manager.stop_cluster(name)
+        result = await _kind_manager.stop_cluster(name)
         result["message"] = (
             f"Cluster '{name}' stopped successfully. Data preserved. "
             f"Use start_cluster to resume."
@@ -575,7 +575,7 @@ def stop_cluster(name: str) -> dict[str, Any]:
         }
 
 
-def restart_cluster(name: str) -> dict[str, Any]:
+async def restart_cluster(name: str) -> dict[str, Any]:
     """Restart a KinD cluster (stop + start cycle).
 
     This tool performs a quick restart of a cluster, useful during
@@ -602,7 +602,7 @@ def restart_cluster(name: str) -> dict[str, Any]:
     try:
         logger.info(f"Restarting cluster '{name}'")
 
-        result = _kind_manager.restart_cluster(name)
+        result = await _kind_manager.restart_cluster(name)
         result["message"] = (
             f"Cluster '{name}' restarted successfully in "
             f"{result['startup_time_seconds']} seconds"

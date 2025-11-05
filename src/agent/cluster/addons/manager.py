@@ -74,10 +74,10 @@ class AddonManager:
         addon_class = getattr(module, class_name)
         return addon_class(self.cluster_name, self.kubeconfig_path, config)
 
-    def install_addons(
+    async def install_addons(
         self, addon_names: list[str], configs: dict[str, dict[str, Any]] | None = None
     ) -> dict[str, Any]:
-        """Install multiple addons.
+        """Install multiple addons asynchronously.
 
         Args:
             addon_names: List of addon names to install
@@ -133,7 +133,7 @@ class AddonManager:
                 logger.info(f"Processing addon: {addon_name}")
                 addon_config = configs.get(addon_name)
                 addon = self.get_addon_instance(addon_name, addon_config)
-                result = addon.run()
+                result = await addon.run()
                 results[addon_name] = result
 
                 if not result.get("success"):
