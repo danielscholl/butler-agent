@@ -30,6 +30,10 @@ from agent.utils.keybindings import (
 )
 from agent.utils.terminal import TIMEOUT_EXIT_CODE, clear_screen
 
+# Configuration constants
+AGENT_EXECUTION_TIMEOUT_SECONDS = 120.0
+MAX_LOG_FILES_TO_RETAIN = 10
+
 console = Console()
 
 
@@ -119,7 +123,7 @@ async def _auto_save_session(
         # Non-fatal, just log it
 
 
-def _cleanup_old_logs(log_dir: Path, keep: int = 10) -> None:
+def _cleanup_old_logs(log_dir: Path, keep: int = MAX_LOG_FILES_TO_RETAIN) -> None:
     """Clean up old log files, keeping only the most recent.
 
     Args:
@@ -203,7 +207,7 @@ def setup_logging(log_level: str = "info", enable_file_logging: bool = True) -> 
             handlers.append(file_handler)
 
             # Keep only last 10 log files
-            _cleanup_old_logs(log_dir, keep=10)
+            _cleanup_old_logs(log_dir)
 
         except Exception as e:
             # File logging is optional, don't fail if it doesn't work
@@ -663,7 +667,7 @@ async def run_chat_mode(
 
                         # Wait for completion with timeout to prevent infinite hangs
                         try:
-                            response = await asyncio.wait_for(agent_task, timeout=120.0)
+                            response = await asyncio.wait_for(agent_task, timeout=AGENT_EXECUTION_TIMEOUT_SECONDS)
                             message_count += 1
                         except TimeoutError:
                             # LLM call timed out after 2 minutes
@@ -671,10 +675,11 @@ async def run_chat_mode(
                             try:
                                 await agent_task
                             except asyncio.CancelledError:
+                                # Task cancellation is expected after timeout; no action needed
                                 pass
                             await execution_display.stop()
                             console.print(
-                                "\n[red]Operation timed out after 120 seconds[/red]\n"
+                                f"\n[red]Operation timed out after {int(AGENT_EXECUTION_TIMEOUT_SECONDS)} seconds[/red]\n"
                                 "[dim]This usually indicates an LLM API issue. Try again or check your connection.[/dim]\n"
                             )
                             continue
@@ -713,6 +718,7 @@ async def run_chat_mode(
                         try:
                             await agent_task
                         except asyncio.CancelledError:
+                            # Suppress CancelledError since cancellation is expected after KeyboardInterrupt
                             pass
                         console.print(
                             "\n[yellow]Operation cancelled[/yellow] - Press Ctrl+C again to exit\n"

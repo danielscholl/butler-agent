@@ -455,7 +455,7 @@ class ExecutionTreeDisplay:
         self._live = Live(
             self._render_phases(),
             console=self.console,
-            refresh_per_second=10,  # Smooth updates
+            refresh_per_second=5,  # 5Hz (200ms) is sufficient for smooth updates
             transient=not self.show_completion_summary,  # Transient when no completion summary
         )
         self._live.start()
