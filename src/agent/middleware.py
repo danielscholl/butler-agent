@@ -29,17 +29,44 @@ async def agent_run_logging_middleware(
     context: AgentRunContext,
     next: Callable[[AgentRunContext], Awaitable[None]],
 ) -> None:
-    """Log agent execution lifecycle.
+    """Log agent execution lifecycle and emit LLM request/response events.
 
     Args:
         context: Agent run context
         next: Next middleware in chain
     """
+    from agent.display import (
+        LLMRequestEvent,
+        LLMResponseEvent,
+        get_event_emitter,
+        should_show_visualization,
+    )
+
     logger.debug("Agent run starting...")
+
+    # Emit LLM request event
+    llm_event_id = None
+    if should_show_visualization():
+        message_count = len(context.messages) if hasattr(context, "messages") else 0
+        event = LLMRequestEvent(message_count=message_count)
+        llm_event_id = event.event_id
+        get_event_emitter().emit(event)
+        logger.debug(f"Emitted LLM request event with {message_count} messages")
+
+    start_time = time.time()
 
     try:
         await next(context)
+        duration = time.time() - start_time
         logger.debug("Agent run completed successfully")
+
+        # Emit LLM response event
+        if should_show_visualization() and llm_event_id:
+            response_event = LLMResponseEvent(duration=duration)
+            response_event.event_id = llm_event_id
+            get_event_emitter().emit(response_event)
+            logger.debug(f"Emitted LLM response event ({duration:.2f}s)")
+
     except Exception as e:
         logger.error(f"Agent run failed: {e}")
         raise
@@ -77,7 +104,7 @@ async def logging_function_middleware(
     context: FunctionInvocationContext,
     next: Callable,
 ) -> Any:
-    """Middleware to log function/tool calls.
+    """Middleware to log function/tool calls and emit execution events.
 
     Args:
         context: Function invocation context
@@ -86,18 +113,86 @@ async def logging_function_middleware(
     Returns:
         Result from next middleware
     """
+    from agent.display import (
+        ToolCompleteEvent,
+        ToolErrorEvent,
+        ToolStartEvent,
+        get_event_emitter,
+        should_show_visualization,
+    )
+
     tool_name = context.function.name
     args = context.arguments
 
-    logger.info(f"Tool call: {tool_name} with args: {args}")
+    logger.info(f"Tool call: {tool_name}")
+
+    # Emit tool start event (if visualization enabled)
+    tool_event_id = None
+    if should_show_visualization():
+        # Convert args to dict for event
+        args_dict = args.dict() if hasattr(args, "dict") else (args if isinstance(args, dict) else {})
+        # Sanitize (remove sensitive keys)
+        safe_args = {k: v for k, v in args_dict.items() if k not in ["token", "api_key", "password"]}
+
+        event = ToolStartEvent(tool_name=tool_name, arguments=safe_args)
+        tool_event_id = event.event_id
+        get_event_emitter().emit(event)
+
+    start_time = time.time()
 
     try:
         result = await next(context)
-        logger.info(f"Tool call {tool_name} completed successfully")
+        duration = time.time() - start_time
+        logger.info(f"Tool call {tool_name} completed successfully ({duration:.2f}s)")
+
+        # Emit tool complete event
+        if should_show_visualization() and tool_event_id:
+            # Extract summary from result
+            summary = _extract_tool_summary(tool_name, result)
+            complete_event = ToolCompleteEvent(
+                tool_name=tool_name,
+                result_summary=summary,
+                duration=duration,
+            )
+            complete_event.event_id = tool_event_id
+            get_event_emitter().emit(complete_event)
+
         return result
     except Exception as e:
+        duration = time.time() - start_time
         logger.error(f"Tool call {tool_name} failed: {e}")
+
+        # Emit tool error event
+        if should_show_visualization() and tool_event_id:
+            error_event = ToolErrorEvent(
+                tool_name=tool_name,
+                error_message=str(e),
+                duration=duration,
+            )
+            error_event.event_id = tool_event_id
+            get_event_emitter().emit(error_event)
+
         raise
+
+
+def _extract_tool_summary(tool_name: str, result: Any) -> str:
+    """Extract human-readable summary from tool result.
+
+    Args:
+        tool_name: Name of the tool
+        result: Tool result
+
+    Returns:
+        Brief summary string
+    """
+    if isinstance(result, dict):
+        if "message" in result:
+            return result["message"]
+        elif "summary" in result:
+            return result["summary"]
+        elif "cluster_name" in result:
+            return f"Cluster '{result['cluster_name']}' ready"
+    return "Complete"
 
 
 async def activity_tracking_middleware(

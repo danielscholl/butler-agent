@@ -280,12 +280,20 @@ class BaseAddon(ABC):
         return True
 
     def run(self) -> dict[str, Any]:
-        """Run the complete addon installation flow.
+        """Run the complete addon installation flow with progress tracking.
 
         Returns:
             Dict with installation result
         """
+        import time
+
+        from agent.display import AddonProgressEvent, get_event_emitter, should_show_visualization
+
         self.log_info(f"Starting installation for cluster '{self.cluster_name}'")
+        start_time = time.time()
+
+        # Get parent tool event ID from context (if available)
+        parent_id = getattr(self, "_parent_event_id", None)
 
         # Check prerequisites
         if not self.check_prerequisites():
@@ -306,15 +314,61 @@ class BaseAddon(ABC):
                 "message": f"{self.addon_name} is already installed",
             }
 
+        # Emit starting event
+        addon_event_id = None
+        if should_show_visualization():
+            event = AddonProgressEvent(
+                addon_name=self.addon_name,
+                status="starting",
+                message=f"Installing {self.addon_name}",
+                parent_id=parent_id,
+            )
+            addon_event_id = event.event_id
+            get_event_emitter().emit(event)
+
         # Install
         try:
             result = self.install()
             if not result.get("success"):
+                # Emit error event
+                duration = time.time() - start_time
+                if should_show_visualization() and addon_event_id:
+                    error_event = AddonProgressEvent(
+                        addon_name=self.addon_name,
+                        status="error",
+                        message=f"Installation failed",
+                        duration=duration,
+                        parent_id=parent_id,
+                    )
+                    error_event.event_id = addon_event_id
+                    get_event_emitter().emit(error_event)
                 return result
+
+            # Emit waiting event
+            if should_show_visualization() and addon_event_id:
+                wait_event = AddonProgressEvent(
+                    addon_name=self.addon_name,
+                    status="waiting",
+                    message=f"Waiting for {self.addon_name} to be ready",
+                    parent_id=parent_id,
+                )
+                wait_event.event_id = addon_event_id
+                get_event_emitter().emit(wait_event)
 
             # Wait for ready
             if not self.wait_for_ready():
                 self.log_warn("Addon installed but not ready within timeout")
+                duration = time.time() - start_time
+                if should_show_visualization() and addon_event_id:
+                    error_event = AddonProgressEvent(
+                        addon_name=self.addon_name,
+                        status="error",
+                        message="Timeout waiting for ready",
+                        duration=duration,
+                        parent_id=parent_id,
+                    )
+                    error_event.event_id = addon_event_id
+                    get_event_emitter().emit(error_event)
                 return {
                     "success": False,
                     "addon": self.addon_name,
@@ -325,6 +379,17 @@ class BaseAddon(ABC):
             # Verify
             if not self.verify():
                 self.log_warn("Addon verification failed")
+                duration = time.time() - start_time
+                if should_show_visualization() and addon_event_id:
+                    error_event = AddonProgressEvent(
+                        addon_name=self.addon_name,
+                        status="error",
+                        message="Verification failed",
+                        duration=duration,
+                        parent_id=parent_id,
+                    )
+                    error_event.event_id = addon_event_id
+                    get_event_emitter().emit(error_event)
                 return {
                     "success": False,
                     "addon": self.addon_name,
@@ -332,18 +397,47 @@ class BaseAddon(ABC):
                     "message": f"{self.addon_name} verification failed",
                 }
 
+            # Emit complete event
+            duration = time.time() - start_time
+            if should_show_visualization() and addon_event_id:
+                complete_event = AddonProgressEvent(
+                    addon_name=self.addon_name,
+                    status="complete",
+                    message="Ready",
+                    duration=duration,
+                    parent_id=parent_id,
+                )
+                complete_event.event_id = addon_event_id
+                get_event_emitter().emit(complete_event)
+
             self.log_info("Installation completed successfully")
             return {
                 "success": True,
                 "addon": self.addon_name,
                 "message": f"{self.addon_name} installed successfully",
+                "duration": duration,
             }
 
         except Exception as e:
             self.log_error(f"Installation failed: {e}")
+            duration = time.time() - start_time
+
+            # Emit error event
+            if should_show_visualization() and addon_event_id:
+                error_event = AddonProgressEvent(
+                    addon_name=self.addon_name,
+                    status="error",
+                    message=f"Failed: {str(e)}",
+                    duration=duration,
+                    parent_id=parent_id,
+                )
+                error_event.event_id = addon_event_id
+                get_event_emitter().emit(error_event)
+
             return {
                 "success": False,
                 "addon": self.addon_name,
                 "error": str(e),
                 "message": f"{self.addon_name} installation failed: {e}",
+                "duration": duration,
             }

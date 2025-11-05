@@ -84,8 +84,14 @@ class Agent:
             tools.extend(mcp_tools)
             logger.info(f"Registered {len(mcp_tools)} MCP tools")
 
-        # Create function-level middleware for tool execution
-        function_middleware = create_middleware()["function"]
+        # Create middleware for both agent and function levels
+        middleware_dict = create_middleware()
+        agent_middleware = middleware_dict["agent"]
+        function_middleware = middleware_dict["function"]
+
+        # Combine all middleware into a single list
+        # Agent framework accepts a list of middleware (agent, function, or chat)
+        all_middleware = agent_middleware + function_middleware
 
         # Create context providers (memory) if enabled
         context_providers = []
@@ -111,7 +117,7 @@ class Agent:
                 "name": "Butler",
                 "instructions": instructions,
                 "tools": tools,
-                "middleware": function_middleware,
+                "middleware": all_middleware,
             }
 
             # Add context providers if available
@@ -122,7 +128,8 @@ class Agent:
 
             logger.info(
                 f"Butler Agent initialized with {len(tools)} tools, "
-                f"{len(function_middleware)} middleware, "
+                f"{len(agent_middleware)} agent middleware, "
+                f"{len(function_middleware)} function middleware, "
                 f"and {len(context_providers)} context providers"
             )
 

@@ -147,14 +147,14 @@ def build_parser() -> argparse.ArgumentParser:
         "-q",
         "--quiet",
         action="store_true",
-        help="Minimal output mode",
+        help="Minimal output (disables execution tree visualization)",
     )
 
     parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="Verbose output with detailed execution information",
+        help="Show detailed execution tree with all phases and tool calls",
     )
 
     parser.add_argument(
@@ -577,18 +577,48 @@ async def run_chat_mode(
                 # Execute query with conversation thread
                 import time
 
+                from agent.display import (
+                    DisplayMode,
+                    ExecutionContext,
+                    ExecutionTreeDisplay,
+                    set_execution_context,
+                )
+
                 start_time = time.time()
 
-                with console.status("[bold blue]Thinking...", spinner="dots"):
+                # Set execution context for visualization
+                ctx = ExecutionContext(is_interactive=True, show_visualization=not quiet)
+                set_execution_context(ctx)
+
+                # Use execution tree display if visualization enabled
+                if not quiet:
+                    display_mode = DisplayMode.VERBOSE if verbose else DisplayMode.MINIMAL
+                    execution_display = ExecutionTreeDisplay(
+                        console=console,
+                        display_mode=display_mode,
+                        show_completion_summary=True,
+                    )
+
+                    await execution_display.start()
+
+                    try:
+                        response = await agent.run(user_input, thread=thread)
+                        message_count += 1
+
+                        # Stop display (shows completion summary)
+                        await execution_display.stop()
+
+                    except KeyboardInterrupt:
+                        # User interrupted - stop display cleanly
+                        await execution_display.stop()
+                        console.print("\n[yellow]Interrupted[/yellow] - Use 'exit' to quit\n")
+                        continue
+                else:
+                    # Quiet mode - no visualization
                     response = await agent.run(user_input, thread=thread)
                     message_count += 1
 
                 elapsed = time.time() - start_time
-                tool_count = _count_tool_calls(thread)
-
-                # Display completion status with metrics
-                if not quiet:
-                    _render_completion_status(elapsed, message_count, tool_count)
 
                 # Display response
                 if response:
@@ -658,19 +688,47 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
         # Execute query (single-turn, no thread persistence needed)
         import time
 
+        from agent.display import (
+            DisplayMode,
+            ExecutionContext,
+            ExecutionTreeDisplay,
+            set_execution_context,
+        )
+
         start_time = time.time()
         thread = agent.get_new_thread()
 
-        with console.status("[bold blue]Thinking...", spinner="dots"):
+        # Set execution context for visualization
+        ctx = ExecutionContext(is_interactive=False, show_visualization=not quiet)
+        set_execution_context(ctx)
+
+        # Use execution tree display if visualization enabled
+        if not quiet:
+            display_mode = DisplayMode.VERBOSE if verbose else DisplayMode.MINIMAL
+            execution_display = ExecutionTreeDisplay(
+                console=console,
+                display_mode=display_mode,
+                show_completion_summary=True,
+            )
+
+            await execution_display.start()
+
+            try:
+                response = await agent.run(prompt, thread=thread)
+
+                # Stop display (shows completion summary)
+                await execution_display.stop()
+
+            except KeyboardInterrupt:
+                # User interrupted - stop display cleanly
+                await execution_display.stop()
+                console.print("\n[yellow]Interrupted by user[/yellow]\n")
+                sys.exit(130)
+        else:
+            # Quiet mode - no visualization
             response = await agent.run(prompt, thread=thread)
 
         elapsed = time.time() - start_time
-        tool_count = _count_tool_calls(thread)
-
-        # Display completion status with metrics
-        if not quiet:
-            console.print()  # Add newline before metrics
-            _render_completion_status(elapsed, 1, tool_count)
 
         # Display response
         if response:
