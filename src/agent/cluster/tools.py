@@ -4,8 +4,12 @@ These functions are exposed as tools that the AI agent can use to manage KinD cl
 """
 
 import logging
+from pathlib import Path
 from typing import Any
 
+import yaml
+
+from agent.cluster.addons import AddonManager
 from agent.cluster.config import get_cluster_config
 from agent.cluster.kind_manager import KindManager
 from agent.cluster.kubectl_manager import KubectlManager
@@ -49,11 +53,13 @@ def create_cluster(
     name: str,
     config: str = "default",
     kubernetes_version: str | None = None,
+    addons: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Create a new KinD cluster.
+    """Create a new KinD cluster with optional add-ons.
 
     This tool creates a new Kubernetes in Docker (KinD) cluster with the specified
     configuration. The cluster will be running locally and ready for deployment.
+    Optionally installs add-ons like NGINX Ingress Controller.
 
     Configuration discovery (automatic):
     1. Named custom: ./data/infra/kind-{config}.yaml (when config != minimal/default/custom)
@@ -64,6 +70,10 @@ def create_cluster(
     - create_cluster("dev", "production") → looks for kind-production.yaml
     - create_cluster("app", "default") → looks for kind-config.yaml, falls back to built-in
     - create_cluster("test", "minimal") → uses built-in minimal template
+    - create_cluster("dev", "default", addons=["ingress"]) → cluster with NGINX Ingress
+
+    Available add-ons:
+    - ingress: NGINX Ingress Controller for HTTP/HTTPS routing
 
     Args:
         name: Name for the cluster (lowercase alphanumeric with hyphens)
@@ -71,6 +81,7 @@ def create_cluster(
                 Built-in templates: "minimal", "default", "custom"
                 Custom configs: any name (will look for kind-{name}.yaml)
         kubernetes_version: Kubernetes version to use (e.g., "v1.34.0", default: latest)
+        addons: Optional list of add-on names to install (e.g., ["ingress"])
 
     Returns:
         Dict containing:
@@ -80,6 +91,7 @@ def create_cluster(
         - nodes: Number of nodes
         - kubeconfig_path: Path to kubeconfig file (if configured)
         - config_source: Description of which config was used
+        - addons_installed: Dict of addon installation results (if addons specified)
         - message: Success message
 
     Raises:
@@ -91,20 +103,85 @@ def create_cluster(
 
     try:
         # Get cluster configuration with automatic discovery
-        cluster_config, config_source = get_cluster_config(
+        cluster_config_yaml, config_source = get_cluster_config(
             config, name, infra_dir=_config.get_infra_path()
         )
 
+        # Parse YAML string to dict for manipulation
+        cluster_config = yaml.safe_load(cluster_config_yaml)
+
         # Use configured default version if not specified
         k8s_version = kubernetes_version or _config.default_k8s_version
+
+        # PHASE 1: Collect and merge addon configuration requirements (pre-cluster creation)
+        if addons:
+            from agent.cluster.config_merge import merge_addon_requirements
+
+            logger.info(f"Collecting configuration requirements from {len(addons)} addon(s)")
+
+            # Temporary addon manager to get addon classes (no kubeconfig yet)
+            temp_manager = AddonManager(name, Path("/tmp/placeholder"))
+
+            addon_requirements = []
+            for addon_name in addons:
+                try:
+                    # Validate addon name
+                    normalized_name = temp_manager._validate_addon_name(addon_name)
+                    canonical_name = temp_manager._alias_map[normalized_name]
+
+                    # Get temporary addon instance for config collection
+                    # Note: kubeconfig path is ignored for pre-creation methods
+                    temp_addon = temp_manager.get_addon_instance(canonical_name, None)
+
+                    # Collect all requirements from this addon
+                    addon_req = {}
+
+                    # Cluster config requirements
+                    config_req = temp_addon.get_cluster_config_requirements()
+                    if config_req:
+                        addon_req.update(config_req)
+
+                    # Port requirements
+                    port_req = temp_addon.get_port_requirements()
+                    if port_req:
+                        addon_req["port_mappings"] = port_req
+
+                    # Node label requirements
+                    label_req = temp_addon.get_node_labels()
+                    if label_req:
+                        addon_req["node_labels"] = label_req
+
+                    if addon_req:
+                        addon_requirements.append(addon_req)
+                        logger.debug(f"Addon '{addon_name}' has configuration requirements")
+
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to collect config requirements from addon '{addon_name}': {e}"
+                    )
+
+            # Merge all addon requirements into cluster config
+            if addon_requirements:
+                cluster_config = merge_addon_requirements(cluster_config, addon_requirements)
+                logger.info(
+                    f"Merged configuration requirements from {len(addon_requirements)} addon(s)"
+                )
+
+        # Convert cluster config dict back to YAML string for kind_manager
+        # Use safe_dump for security.
+        # The argument sort_keys=False preserves the original key order from the merged config dict
+        # (insertion order in Python 3.7+), making diffs more readable.
+        cluster_config_yaml = yaml.safe_dump(
+            cluster_config, default_flow_style=False, sort_keys=False
+        )
 
         logger.info(
             f"Creating cluster '{name}' with config '{config}' ({config_source}), "
             f"version {k8s_version}"
         )
 
-        # Create cluster
-        result = _kind_manager.create_cluster(name, cluster_config, k8s_version)
+        # Create cluster with merged configuration
+        result = _kind_manager.create_cluster(name, cluster_config_yaml, k8s_version)
 
         # Export and save kubeconfig if data directory is configured
         if _config:
@@ -124,10 +201,33 @@ def create_cluster(
                 result["kubeconfig_path"] = None
 
         result["config_source"] = config_source
-        result["message"] = (
-            f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
-            f"using {config_source}"
-        )
+
+        # PHASE 2: Install add-ons (post-cluster creation, only if kubeconfig saved successfully)
+        if addons and result.get("kubeconfig_path"):
+            logger.info(f"Installing {len(addons)} add-on(s): {', '.join(addons)}")
+            addon_manager = AddonManager(name, Path(result["kubeconfig_path"]))
+            addon_result = addon_manager.install_addons(addons)
+
+            result["addons_installed"] = addon_result
+
+            # Update message
+            if addon_result.get("success"):
+                result["message"] = (
+                    f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
+                    f"using {config_source}. {addon_result['message']}"
+                )
+            else:
+                result["message"] = (
+                    f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
+                    f"using {config_source}. Add-ons: {addon_result['message']}"
+                )
+                # Log warning but don't fail cluster creation
+                logger.warning(f"Some add-ons failed to install: {addon_result.get('failed', [])}")
+        else:
+            result["message"] = (
+                f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
+                f"using {config_source}"
+            )
 
         return result
 

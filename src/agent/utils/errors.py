@@ -77,3 +77,27 @@ class InvalidManifestError(ButlerError):
     """Raised when a Kubernetes manifest is invalid or malformed."""
 
     pass
+
+
+class AddonError(ButlerError):
+    """Base exception for addon-related errors."""
+
+    pass
+
+
+class AddonInstallError(AddonError):
+    """Raised when an addon installation fails."""
+
+    pass
+
+
+class AddonAlreadyInstalledError(AddonError):
+    """Raised when attempting to install an addon that is already installed."""
+
+    pass
+
+
+class HelmCommandError(AddonError):
+    """Raised when a helm CLI command fails."""
+
+    pass
