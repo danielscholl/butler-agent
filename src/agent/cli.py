@@ -667,7 +667,9 @@ async def run_chat_mode(
 
                         # Wait for completion with timeout to prevent infinite hangs
                         try:
-                            response = await asyncio.wait_for(agent_task, timeout=AGENT_EXECUTION_TIMEOUT_SECONDS)
+                            response = await asyncio.wait_for(
+                                agent_task, timeout=AGENT_EXECUTION_TIMEOUT_SECONDS
+                            )
                             message_count += 1
                         except TimeoutError:
                             # LLM call timed out after 2 minutes
