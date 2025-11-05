@@ -1,8 +1,7 @@
 """Tests for NGINX Ingress addon."""
 
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -39,29 +38,32 @@ def test_ingress_addon_custom_config():
     assert addon.custom_values == {"custom.key": "value"}
 
 
-@patch("subprocess.run")
-def test_check_prerequisites_success(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_check_prerequisites_success(mock_run, ingress_addon):
     """Test prerequisites check success."""
     # Mock kubectl cluster-info
     mock_run.return_value = MagicMock(returncode=0, stdout="Kubernetes control plane")
 
-    result = ingress_addon.check_prerequisites()
+    result = await ingress_addon.check_prerequisites()
 
     assert result is True
 
 
-@patch("subprocess.run")
-def test_check_prerequisites_kubectl_fail(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_check_prerequisites_kubectl_fail(mock_run, ingress_addon):
     """Test prerequisites check when kubectl fails."""
     mock_run.return_value = MagicMock(returncode=1, stderr="cluster not accessible")
 
-    result = ingress_addon.check_prerequisites()
+    result = await ingress_addon.check_prerequisites()
 
     assert result is False
 
 
-@patch("subprocess.run")
-def test_check_prerequisites_helm_not_found(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_check_prerequisites_helm_not_found(mock_run, ingress_addon):
     """Test prerequisites check when helm not found."""
 
     def run_side_effect(*args, **kwargs):
@@ -73,24 +75,26 @@ def test_check_prerequisites_helm_not_found(mock_run, ingress_addon):
 
     mock_run.side_effect = run_side_effect
 
-    result = ingress_addon.check_prerequisites()
+    result = await ingress_addon.check_prerequisites()
 
     assert result is False
 
 
-@patch.object(IngressNginxAddon, "_run_helm")
-def test_is_installed_via_helm(mock_run_helm, ingress_addon):
+@pytest.mark.asyncio
+@patch.object(IngressNginxAddon, "_run_helm", new_callable=AsyncMock)
+async def test_is_installed_via_helm(mock_run_helm, ingress_addon):
     """Test detecting installation via Helm."""
     mock_run_helm.return_value = MagicMock(returncode=0, stdout="ingress-nginx\n")
 
-    result = ingress_addon.is_installed()
+    result = await ingress_addon.is_installed()
 
     assert result is True
 
 
-@patch.object(IngressNginxAddon, "_run_helm")
-@patch("subprocess.run")
-def test_is_installed_via_kubectl(mock_subprocess, mock_run_helm, ingress_addon):
+@pytest.mark.asyncio
+@patch.object(IngressNginxAddon, "_run_helm", new_callable=AsyncMock)
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_is_installed_via_kubectl(mock_subprocess, mock_run_helm, ingress_addon):
     """Test detecting installation via kubectl."""
     # Helm check fails
     mock_run_helm.side_effect = Exception("Helm error")
@@ -98,29 +102,31 @@ def test_is_installed_via_kubectl(mock_subprocess, mock_run_helm, ingress_addon)
     # kubectl check succeeds
     mock_subprocess.return_value = MagicMock(returncode=0)
 
-    result = ingress_addon.is_installed()
+    result = await ingress_addon.is_installed()
 
     assert result is True
 
 
-@patch.object(IngressNginxAddon, "_run_helm")
-@patch("subprocess.run")
-def test_is_not_installed(mock_subprocess, mock_run_helm, ingress_addon):
+@pytest.mark.asyncio
+@patch.object(IngressNginxAddon, "_run_helm", new_callable=AsyncMock)
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_is_not_installed(mock_subprocess, mock_run_helm, ingress_addon):
     """Test when addon is not installed."""
     # Both Helm and kubectl checks fail
     mock_run_helm.return_value = MagicMock(returncode=0, stdout="")
     mock_subprocess.return_value = MagicMock(returncode=1)
 
-    result = ingress_addon.is_installed()
+    result = await ingress_addon.is_installed()
 
     assert result is False
 
 
-@patch.object(IngressNginxAddon, "_add_helm_repo")
-@patch.object(IngressNginxAddon, "_helm_install")
-def test_install_success(mock_helm_install, mock_add_repo, ingress_addon):
+@pytest.mark.asyncio
+@patch.object(IngressNginxAddon, "_add_helm_repo", new_callable=AsyncMock)
+@patch.object(IngressNginxAddon, "_helm_install", new_callable=AsyncMock)
+async def test_install_success(mock_helm_install, mock_add_repo, ingress_addon):
     """Test successful installation."""
-    result = ingress_addon.install()
+    result = await ingress_addon.install()
 
     assert result["success"] is True
     assert "NGINX Ingress Controller installed" in result["message"]
@@ -139,15 +145,16 @@ def test_install_success(mock_helm_install, mock_add_repo, ingress_addon):
     assert "controller.service.type" in call_kwargs["values"]
 
 
-@patch.object(IngressNginxAddon, "_add_helm_repo")
-@patch.object(IngressNginxAddon, "_helm_install")
-def test_install_with_custom_values(mock_helm_install, mock_add_repo):
+@pytest.mark.asyncio
+@patch.object(IngressNginxAddon, "_add_helm_repo", new_callable=AsyncMock)
+@patch.object(IngressNginxAddon, "_helm_install", new_callable=AsyncMock)
+async def test_install_with_custom_values(mock_helm_install, mock_add_repo):
     """Test installation with custom values."""
     kubeconfig = Path("/tmp/test-kubeconfig")
     config = {"values": {"custom.key": "custom-value"}}
     addon = IngressNginxAddon("test", kubeconfig, config)
 
-    addon.install()
+    await addon.install()
 
     # Verify custom values are merged
     call_kwargs = mock_helm_install.call_args[1]
@@ -155,63 +162,69 @@ def test_install_with_custom_values(mock_helm_install, mock_add_repo):
     assert call_kwargs["values"]["custom.key"] == "custom-value"
 
 
-@patch("subprocess.run")
-def test_wait_for_ready_success(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_wait_for_ready_success(mock_run, ingress_addon):
     """Test waiting for deployment to be ready."""
     mock_run.return_value = MagicMock(returncode=0, stdout="deployment ready")
 
-    result = ingress_addon.wait_for_ready(timeout=60)
+    result = await ingress_addon.wait_for_ready(timeout=60)
 
     assert result is True
 
 
-@patch("subprocess.run")
-def test_wait_for_ready_timeout(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_wait_for_ready_timeout(mock_run, ingress_addon):
     """Test wait timeout."""
-    mock_run.side_effect = subprocess.TimeoutExpired(cmd="kubectl wait", timeout=60)
+    mock_run.side_effect = TimeoutError()
 
-    result = ingress_addon.wait_for_ready(timeout=60)
+    result = await ingress_addon.wait_for_ready(timeout=60)
 
     assert result is False
 
 
-@patch("subprocess.run")
-def test_wait_for_ready_failure(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_wait_for_ready_failure(mock_run, ingress_addon):
     """Test wait failure."""
     mock_run.return_value = MagicMock(returncode=1, stderr="deployment not ready")
 
-    result = ingress_addon.wait_for_ready()
+    result = await ingress_addon.wait_for_ready()
 
     assert result is False
 
 
-@patch("subprocess.run")
-def test_verify_success(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_verify_success(mock_run, ingress_addon):
     """Test verification success."""
     mock_run.return_value = MagicMock(
         returncode=0, stdout="ingress-nginx-admission\nother-webhook\n"
     )
 
-    result = ingress_addon.verify()
+    result = await ingress_addon.verify()
 
     assert result is True
 
 
-@patch("subprocess.run")
-def test_verify_failure(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_verify_failure(mock_run, ingress_addon):
     """Test verification failure."""
     mock_run.return_value = MagicMock(returncode=0, stdout="other-webhook\n")
 
-    result = ingress_addon.verify()
+    result = await ingress_addon.verify()
 
     assert result is False
 
 
-@patch("subprocess.run")
-def test_verify_exception(mock_run, ingress_addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
+async def test_verify_exception(mock_run, ingress_addon):
     """Test verification exception."""
     mock_run.side_effect = Exception("kubectl error")
 
-    result = ingress_addon.verify()
+    result = await ingress_addon.verify()
 
     assert result is False

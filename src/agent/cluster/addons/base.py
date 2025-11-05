@@ -2,11 +2,11 @@
 
 import logging
 import os
-import subprocess
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from agent.utils.async_subprocess import AsyncCompletedProcess, run_async
 from agent.utils.errors import HelmCommandError
 
 logger = logging.getLogger(__name__)
@@ -45,14 +45,14 @@ class BaseAddon(ABC):
         """Log error message with addon prefix."""
         logger.error(f"[{self.addon_name}] {message}")
 
-    def _run_helm(
+    async def _run_helm(
         self,
         args: list[str],
         check: bool = True,
         capture_output: bool = True,
         timeout: int = 120,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run helm command with kubeconfig.
+    ) -> AsyncCompletedProcess:
+        """Run helm command with kubeconfig asynchronously.
 
         Args:
             args: Helm command arguments
@@ -61,7 +61,7 @@ class BaseAddon(ABC):
             timeout: Command timeout in seconds
 
         Returns:
-            CompletedProcess result
+            AsyncCompletedProcess result
 
         Raises:
             HelmCommandError: If command fails and check=True
@@ -73,13 +73,12 @@ class BaseAddon(ABC):
             env = os.environ.copy()
             env["KUBECONFIG"] = str(self.kubeconfig_path)
 
-            result = subprocess.run(
+            result = await run_async(
                 cmd,
-                capture_output=capture_output,
-                text=True,
-                timeout=timeout,
                 env=env,
+                timeout=timeout,
                 check=False,
+                capture_output=capture_output,
             )
 
             if check and result.returncode != 0:
@@ -88,25 +87,25 @@ class BaseAddon(ABC):
 
             return result
 
-        except subprocess.TimeoutExpired as e:
+        except TimeoutError as e:
             raise HelmCommandError(f"Helm command timed out after {timeout} seconds") from e
         except FileNotFoundError as e:
             raise HelmCommandError(
                 "helm CLI not found. Please install helm: https://helm.sh/docs/intro/install/"
             ) from e
 
-    def _add_helm_repo(self, name: str, url: str) -> None:
-        """Add or update a Helm repository.
+    async def _add_helm_repo(self, name: str, url: str) -> None:
+        """Add or update a Helm repository asynchronously.
 
         Args:
             name: Repository name
             url: Repository URL
         """
         self.log_info(f"Adding Helm repository: {name}")
-        self._run_helm(["repo", "add", name, url], check=False)
-        self._run_helm(["repo", "update"], check=False)
+        await self._run_helm(["repo", "add", name, url], check=False)
+        await self._run_helm(["repo", "update"], check=False)
 
-    def _helm_install(
+    async def _helm_install(
         self,
         release_name: str,
         chart: str,
@@ -114,7 +113,7 @@ class BaseAddon(ABC):
         values: dict[str, Any] | None = None,
         version: str | None = None,
     ) -> None:
-        """Install a Helm chart.
+        """Install a Helm chart asynchronously.
 
         Args:
             release_name: Name for the Helm release
@@ -141,7 +140,7 @@ class BaseAddon(ABC):
                 cmd_args.extend(["--set", f"{key}={value}"])
 
         self.log_info(f"Installing Helm chart: {chart}")
-        self._run_helm(cmd_args, timeout=300)  # 5 minute timeout for installation
+        await self._run_helm(cmd_args, timeout=300)  # 5 minute timeout for installation
 
     def get_cluster_config_requirements(self) -> dict[str, Any]:
         """Return cluster config patches needed before cluster creation.
@@ -229,7 +228,7 @@ class BaseAddon(ABC):
         return {}
 
     @abstractmethod
-    def check_prerequisites(self) -> bool:
+    async def check_prerequisites(self) -> bool:
         """Check if prerequisites for addon installation are met.
 
         Returns:
@@ -238,7 +237,7 @@ class BaseAddon(ABC):
         pass
 
     @abstractmethod
-    def is_installed(self) -> bool:
+    async def is_installed(self) -> bool:
         """Check if addon is already installed.
 
         Returns:
@@ -247,8 +246,8 @@ class BaseAddon(ABC):
         pass
 
     @abstractmethod
-    def install(self) -> dict[str, Any]:
-        """Install the addon.
+    async def install(self) -> dict[str, Any]:
+        """Install the addon asynchronously.
 
         Returns:
             Dict with installation result:
@@ -258,8 +257,8 @@ class BaseAddon(ABC):
         """
         pass
 
-    def wait_for_ready(self, timeout: int = 120) -> bool:
-        """Wait for addon to be ready.
+    async def wait_for_ready(self, timeout: int = 120) -> bool:
+        """Wait for addon to be ready asynchronously.
 
         Args:
             timeout: Timeout in seconds
@@ -270,8 +269,8 @@ class BaseAddon(ABC):
         # Default implementation - subclasses can override
         return True
 
-    def verify(self) -> bool:
-        """Verify addon is functioning correctly.
+    async def verify(self) -> bool:
+        """Verify addon is functioning correctly asynchronously.
 
         Returns:
             True if addon is verified, False otherwise
@@ -279,16 +278,35 @@ class BaseAddon(ABC):
         # Default implementation - subclasses can override
         return True
 
-    def run(self) -> dict[str, Any]:
-        """Run the complete addon installation flow.
+    async def run(self) -> dict[str, Any]:
+        """Run the complete addon installation flow with progress tracking asynchronously.
 
         Returns:
             Dict with installation result
         """
+        import time
+
+        from agent.display import (
+            AddonProgressEvent,
+            get_current_tool_event_id,
+            get_event_emitter,
+            should_show_visualization,
+        )
+
         self.log_info(f"Starting installation for cluster '{self.cluster_name}'")
+        start_time = time.time()
+
+        # Get parent tool event ID from context (automatically set by middleware)
+        parent_id = get_current_tool_event_id()
+        if parent_id:
+            logger.debug(
+                f"Addon {self.addon_name} nesting under parent tool (id: {parent_id[:8]}...)"
+            )
+        else:
+            logger.debug(f"Addon {self.addon_name} running without parent context")
 
         # Check prerequisites
-        if not self.check_prerequisites():
+        if not await self.check_prerequisites():
             return {
                 "success": False,
                 "addon": self.addon_name,
@@ -297,7 +315,7 @@ class BaseAddon(ABC):
             }
 
         # Check if already installed
-        if self.is_installed():
+        if await self.is_installed():
             self.log_info("Already installed, skipping")
             return {
                 "success": True,
@@ -306,15 +324,61 @@ class BaseAddon(ABC):
                 "message": f"{self.addon_name} is already installed",
             }
 
+        # Emit starting event
+        addon_event_id = None
+        if should_show_visualization():
+            event = AddonProgressEvent(
+                addon_name=self.addon_name,
+                status="starting",
+                message=f"Installing {self.addon_name}",
+                parent_id=parent_id,
+            )
+            addon_event_id = event.event_id
+            get_event_emitter().emit(event)
+
         # Install
         try:
-            result = self.install()
+            result = await self.install()
             if not result.get("success"):
+                # Emit error event
+                duration = time.time() - start_time
+                if should_show_visualization() and addon_event_id:
+                    error_event = AddonProgressEvent(
+                        addon_name=self.addon_name,
+                        status="error",
+                        message="Installation failed",
+                        duration=duration,
+                        parent_id=parent_id,
+                    )
+                    error_event.event_id = addon_event_id
+                    get_event_emitter().emit(error_event)
                 return result
 
+            # Emit waiting event
+            if should_show_visualization() and addon_event_id:
+                wait_event = AddonProgressEvent(
+                    addon_name=self.addon_name,
+                    status="waiting",
+                    message=f"Waiting for {self.addon_name} to be ready",
+                    parent_id=parent_id,
+                )
+                wait_event.event_id = addon_event_id
+                get_event_emitter().emit(wait_event)
+
             # Wait for ready
-            if not self.wait_for_ready():
+            if not await self.wait_for_ready():
                 self.log_warn("Addon installed but not ready within timeout")
+                duration = time.time() - start_time
+                if should_show_visualization() and addon_event_id:
+                    error_event = AddonProgressEvent(
+                        addon_name=self.addon_name,
+                        status="error",
+                        message="Timeout waiting for ready",
+                        duration=duration,
+                        parent_id=parent_id,
+                    )
+                    error_event.event_id = addon_event_id
+                    get_event_emitter().emit(error_event)
                 return {
                     "success": False,
                     "addon": self.addon_name,
@@ -323,8 +387,19 @@ class BaseAddon(ABC):
                 }
 
             # Verify
-            if not self.verify():
+            if not await self.verify():
                 self.log_warn("Addon verification failed")
+                duration = time.time() - start_time
+                if should_show_visualization() and addon_event_id:
+                    error_event = AddonProgressEvent(
+                        addon_name=self.addon_name,
+                        status="error",
+                        message="Verification failed",
+                        duration=duration,
+                        parent_id=parent_id,
+                    )
+                    error_event.event_id = addon_event_id
+                    get_event_emitter().emit(error_event)
                 return {
                     "success": False,
                     "addon": self.addon_name,
@@ -332,18 +407,47 @@ class BaseAddon(ABC):
                     "message": f"{self.addon_name} verification failed",
                 }
 
+            # Emit complete event
+            duration = time.time() - start_time
+            if should_show_visualization() and addon_event_id:
+                complete_event = AddonProgressEvent(
+                    addon_name=self.addon_name,
+                    status="complete",
+                    message="Ready",
+                    duration=duration,
+                    parent_id=parent_id,
+                )
+                complete_event.event_id = addon_event_id
+                get_event_emitter().emit(complete_event)
+
             self.log_info("Installation completed successfully")
             return {
                 "success": True,
                 "addon": self.addon_name,
                 "message": f"{self.addon_name} installed successfully",
+                "duration": duration,
             }
 
         except Exception as e:
             self.log_error(f"Installation failed: {e}")
+            duration = time.time() - start_time
+
+            # Emit error event
+            if should_show_visualization() and addon_event_id:
+                error_event = AddonProgressEvent(
+                    addon_name=self.addon_name,
+                    status="error",
+                    message=f"Failed: {str(e)}",
+                    duration=duration,
+                    parent_id=parent_id,
+                )
+                error_event.event_id = addon_event_id
+                get_event_emitter().emit(error_event)
+
             return {
                 "success": False,
                 "addon": self.addon_name,
                 "error": str(e),
                 "message": f"{self.addon_name} installation failed: {e}",
+                "duration": duration,
             }

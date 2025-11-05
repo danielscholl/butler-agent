@@ -1,9 +1,8 @@
 """Tests for BaseAddon abstract class."""
 
 import logging
-import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -14,13 +13,13 @@ from agent.utils.errors import HelmCommandError
 class ConcreteAddon(BaseAddon):
     """Concrete implementation for testing."""
 
-    def check_prerequisites(self) -> bool:
+    async def check_prerequisites(self) -> bool:
         return True
 
-    def is_installed(self) -> bool:
+    async def is_installed(self) -> bool:
         return False
 
-    def install(self) -> dict:
+    async def install(self) -> dict:
         return {"success": True, "message": "Test addon installed"}
 
 
@@ -52,12 +51,13 @@ def test_addon_logging(addon, caplog):
     assert "test error" in caplog.text
 
 
-@patch("subprocess.run")
-def test_run_helm_success(mock_run, addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.base.run_async", new_callable=AsyncMock)
+async def test_run_helm_success(mock_run, addon):
     """Test successful helm command execution."""
     mock_run.return_value = MagicMock(returncode=0, stdout="success", stderr="")
 
-    result = addon._run_helm(["version"])
+    result = await addon._run_helm(["version"])
 
     assert result.returncode == 0
     mock_run.assert_called_once()
@@ -65,47 +65,52 @@ def test_run_helm_success(mock_run, addon):
     assert call_args[0][0] == ["helm", "version"]
 
 
-@patch("subprocess.run")
-def test_run_helm_failure(mock_run, addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.base.run_async", new_callable=AsyncMock)
+async def test_run_helm_failure(mock_run, addon):
     """Test failed helm command."""
     mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
 
     with pytest.raises(HelmCommandError, match="Helm command failed"):
-        addon._run_helm(["invalid"], check=True)
+        await addon._run_helm(["invalid"], check=True)
 
 
-@patch("subprocess.run")
-def test_run_helm_timeout(mock_run, addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.base.run_async", new_callable=AsyncMock)
+async def test_run_helm_timeout(mock_run, addon):
     """Test helm command timeout."""
-    mock_run.side_effect = subprocess.TimeoutExpired(cmd="helm", timeout=30)
+    mock_run.side_effect = TimeoutError()
 
     with pytest.raises(HelmCommandError, match="timed out"):
-        addon._run_helm(["version"])
+        await addon._run_helm(["version"])
 
 
-@patch("subprocess.run")
-def test_run_helm_not_found(mock_run, addon):
+@pytest.mark.asyncio
+@patch("agent.cluster.addons.base.run_async", new_callable=AsyncMock)
+async def test_run_helm_not_found(mock_run, addon):
     """Test helm not found."""
     mock_run.side_effect = FileNotFoundError()
 
     with pytest.raises(HelmCommandError, match="helm CLI not found"):
-        addon._run_helm(["version"])
+        await addon._run_helm(["version"])
 
 
-@patch.object(ConcreteAddon, "_run_helm")
-def test_add_helm_repo(mock_run_helm, addon):
+@pytest.mark.asyncio
+@patch.object(ConcreteAddon, "_run_helm", new_callable=AsyncMock)
+async def test_add_helm_repo(mock_run_helm, addon):
     """Test adding helm repository."""
-    addon._add_helm_repo("test-repo", "https://test.com")
+    await addon._add_helm_repo("test-repo", "https://test.com")
 
     assert mock_run_helm.call_count == 2
     mock_run_helm.assert_any_call(["repo", "add", "test-repo", "https://test.com"], check=False)
     mock_run_helm.assert_any_call(["repo", "update"], check=False)
 
 
-@patch.object(ConcreteAddon, "_run_helm")
-def test_helm_install(mock_run_helm, addon):
+@pytest.mark.asyncio
+@patch.object(ConcreteAddon, "_run_helm", new_callable=AsyncMock)
+async def test_helm_install(mock_run_helm, addon):
     """Test helm install."""
-    addon._helm_install(
+    await addon._helm_install(
         release_name="test-release",
         chart="test/chart",
         namespace="test-ns",
@@ -128,55 +133,59 @@ def test_helm_install(mock_run_helm, addon):
     assert "1.0.0" in call_args
 
 
-def test_run_success_flow(addon):
+@pytest.mark.asyncio
+async def test_run_success_flow(addon):
     """Test successful run flow."""
-    result = addon.run()
+    result = await addon.run()
 
     assert result["success"] is True
     assert result["addon"] == "concrete"
     assert "installed successfully" in result["message"]
 
 
-def test_run_prerequisites_fail():
+@pytest.mark.asyncio
+async def test_run_prerequisites_fail():
     """Test run when prerequisites fail."""
 
     class FailPrereqAddon(ConcreteAddon):
-        def check_prerequisites(self):
+        async def check_prerequisites(self):
             return False
 
     kubeconfig = Path("/tmp/test-kubeconfig")
     addon = FailPrereqAddon("test", kubeconfig)
-    result = addon.run()
+    result = await addon.run()
 
     assert result["success"] is False
     assert "Prerequisites not met" in result["error"]
 
 
-def test_run_already_installed():
+@pytest.mark.asyncio
+async def test_run_already_installed():
     """Test run when already installed."""
 
     class InstalledAddon(ConcreteAddon):
-        def is_installed(self):
+        async def is_installed(self):
             return True
 
     kubeconfig = Path("/tmp/test-kubeconfig")
     addon = InstalledAddon("test", kubeconfig)
-    result = addon.run()
+    result = await addon.run()
 
     assert result["success"] is True
     assert result.get("skipped") is True
     assert "already installed" in result["message"]
 
 
-def test_run_install_failure():
+@pytest.mark.asyncio
+async def test_run_install_failure():
     """Test run when install fails."""
 
     class FailInstallAddon(ConcreteAddon):
-        def install(self):
+        async def install(self):
             return {"success": False, "error": "Install failed"}
 
     kubeconfig = Path("/tmp/test-kubeconfig")
     addon = FailInstallAddon("test", kubeconfig)
-    result = addon.run()
+    result = await addon.run()
 
     assert result["success"] is False

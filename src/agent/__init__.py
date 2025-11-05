@@ -14,7 +14,7 @@ try:
     __version__ = version("butler-agent")
 except PackageNotFoundError:
     # Fallback for development/testing environments
-    __version__ = "0.1.4"
+    __version__ = "0.1.5"
 
 __all__ = [
     "Agent",

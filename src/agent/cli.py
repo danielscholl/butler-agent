@@ -30,6 +30,10 @@ from agent.utils.keybindings import (
 )
 from agent.utils.terminal import TIMEOUT_EXIT_CODE, clear_screen
 
+# Configuration constants
+AGENT_EXECUTION_TIMEOUT_SECONDS = 120.0
+MAX_LOG_FILES_TO_RETAIN = 10
+
 console = Console()
 
 
@@ -71,7 +75,11 @@ def _get_last_session() -> str | None:
 
 
 async def _auto_save_session(
-    persistence: Any, thread: Any, message_count: int, quiet: bool = False
+    persistence: Any,
+    thread: Any,
+    message_count: int,
+    quiet: bool = False,
+    log_file: Path | None = None,
 ) -> None:
     """Auto-save the current session on exit.
 
@@ -80,6 +88,7 @@ async def _auto_save_session(
         thread: Current conversation thread
         message_count: Number of messages in thread
         quiet: Whether to suppress output
+        log_file: Optional log file path to link to session
     """
     # Only save if there are messages
     if message_count == 0:
@@ -89,8 +98,19 @@ async def _auto_save_session(
         timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
         session_name = f"auto-{timestamp}"
 
+        # Save thread with metadata
         await persistence.save_thread(thread, session_name)
         _save_last_session(session_name)
+
+        # Link log file to session if available
+        if log_file and log_file.exists():
+            try:
+                session_dir = persistence.conversations_dir / session_name
+                log_link_file = session_dir / "log_file.txt"
+                log_link_file.write_text(str(log_file))
+                logging.debug(f"Linked log file {log_file.name} to session {session_name}")
+            except Exception as e:
+                logging.debug(f"Failed to link log file: {e}")
 
         if not quiet:
             console.print("\n[green]✓ Session auto-saved[/green]")
@@ -103,25 +123,101 @@ async def _auto_save_session(
         # Non-fatal, just log it
 
 
-def setup_logging(log_level: str = "info") -> None:
-    """Setup logging with Rich handler.
+def _cleanup_old_logs(log_dir: Path, keep: int = MAX_LOG_FILES_TO_RETAIN) -> None:
+    """Clean up old log files, keeping only the most recent.
+
+    Args:
+        log_dir: Directory containing log files
+        keep: Number of recent log files to keep
+    """
+    try:
+        log_files = sorted(
+            log_dir.glob("butler-*.log"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
+
+        # Delete old files beyond the keep limit
+        for old_file in log_files[keep:]:
+            old_file.unlink()
+            logging.debug(f"Deleted old log file: {old_file.name}")
+
+    except Exception as e:
+        # Non-fatal, just log
+        logging.debug(f"Failed to clean up old logs: {e}")
+
+
+def setup_logging(log_level: str = "info", enable_file_logging: bool = True) -> None:
+    """Setup logging with Rich handler and optional file logging.
 
     Args:
         log_level: Logging level (debug, info, warning, error)
+        enable_file_logging: Enable logging to ~/.butler/logs/
     """
     level = getattr(logging, log_level.upper(), logging.INFO)
+
+    handlers: list[logging.Handler] = [
+        RichHandler(
+            console=console,
+            show_time=False,
+            show_path=False,
+            rich_tracebacks=True,
+        )
+    ]
+
+    # Add file handler for debugging
+    if enable_file_logging:
+        try:
+            log_dir = Path.home() / ".butler" / "logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create session-specific log file
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            log_file = log_dir / f"butler-{timestamp}.log"
+
+            file_handler = logging.FileHandler(log_file, encoding="utf-8")
+            file_handler.setLevel(logging.DEBUG)  # Always DEBUG in file
+
+            # Use JSON-friendly format for structured logging
+            # Format: {"timestamp": "...", "logger": "...", "level": "...", "message": "..."}
+            class JsonFormatter(logging.Formatter):
+                """JSON formatter for structured logging."""
+
+                def format(self, record):
+                    import json
+
+                    log_data = {
+                        "timestamp": self.formatTime(record, "%Y-%m-%d %H:%M:%S"),
+                        "logger": record.name,
+                        "level": record.levelname,
+                        "message": record.getMessage(),
+                    }
+
+                    # Add exception info if present
+                    if record.exc_info:
+                        log_data["exception"] = self.formatException(record.exc_info)
+
+                    # Add extra fields if present
+                    if hasattr(record, "tool_name"):
+                        log_data["tool_name"] = record.tool_name
+                    if hasattr(record, "event_type"):
+                        log_data["event_type"] = record.event_type
+
+                    return json.dumps(log_data)
+
+            file_handler.setFormatter(JsonFormatter())
+            handlers.append(file_handler)
+
+            # Keep only last 10 log files
+            _cleanup_old_logs(log_dir)
+
+        except Exception as e:
+            # File logging is optional, don't fail if it doesn't work
+            console.print(f"[dim]Warning: Could not enable file logging: {e}[/dim]")
 
     logging.basicConfig(
         level=level,
         format="%(message)s",
-        handlers=[
-            RichHandler(
-                console=console,
-                show_time=False,
-                show_path=False,
-                rich_tracebacks=True,
-            )
-        ],
+        handlers=handlers,
+        force=True,  # Override any existing config
     )
 
 
@@ -147,14 +243,14 @@ def build_parser() -> argparse.ArgumentParser:
         "-q",
         "--quiet",
         action="store_true",
-        help="Minimal output mode",
+        help="Minimal output (disables execution tree visualization)",
     )
 
     parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
-        help="Verbose output with detailed execution information",
+        help="Show detailed execution tree with all phases and tool calls",
     )
 
     parser.add_argument(
@@ -260,49 +356,6 @@ def _render_prompt_area() -> str:
     return "> "
 
 
-def _count_tool_calls(thread: Any) -> int:
-    """Count tool calls in the thread.
-
-    Args:
-        thread: Agent thread object
-
-    Returns:
-        Number of tool calls
-    """
-    try:
-        # Try to access messages from thread
-        if not hasattr(thread, "messages"):
-            return 0
-
-        tool_count = 0
-        for message in thread.messages:
-            # Check for tool calls in message
-            if hasattr(message, "tool_calls") and message.tool_calls:
-                tool_count += len(message.tool_calls)
-            # Alternative: check for function_call
-            elif hasattr(message, "function_call") and message.function_call:
-                tool_count += 1
-
-        return tool_count
-    except Exception:
-        # If we can't count, return 0
-        return 0
-
-
-def _render_completion_status(elapsed: float, message_count: int, tool_count: int) -> None:
-    """Render completion status with metrics.
-
-    Args:
-        elapsed: Elapsed time in seconds
-        message_count: Number of messages in conversation
-        tool_count: Number of tool calls
-    """
-    console.print(
-        f"[cyan]☸[/cyan] Complete ({elapsed:.1f}s) - msg:{message_count} tool:{tool_count}\n",
-        highlight=False,
-    )
-
-
 async def run_chat_mode(
     quiet: bool = False, verbose: bool = False, resume_session: str | None = None
 ) -> None:
@@ -321,6 +374,14 @@ async def run_chat_mode(
         # Setup logging
         log_level = "debug" if verbose else config.log_level
         setup_logging(log_level)
+
+        # Track current log file for session linking
+        current_log_file = None
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            current_log_file = Path.home() / ".butler" / "logs" / f"butler-{timestamp}.log"
+        except Exception:
+            pass  # Log file tracking is optional
 
         # Initialize observability
         if config.applicationinsights_connection_string:
@@ -447,7 +508,9 @@ async def run_chat_mode(
 
                 if cmd in ["exit", "quit", "q"]:
                     # Auto-save session before exit
-                    await _auto_save_session(persistence, thread, message_count, quiet)
+                    await _auto_save_session(
+                        persistence, thread, message_count, quiet, current_log_file
+                    )
                     console.print("[dim]Goodbye! 👋[/dim]")
                     break
 
@@ -575,20 +638,94 @@ async def run_chat_mode(
                     continue
 
                 # Execute query with conversation thread
-                import time
 
-                start_time = time.time()
+                from agent.display import (
+                    DisplayMode,
+                    ExecutionContext,
+                    ExecutionTreeDisplay,
+                    set_execution_context,
+                )
 
-                with console.status("[bold blue]Thinking...", spinner="dots"):
-                    response = await agent.run(user_input, thread=thread)
-                    message_count += 1
+                # Set execution context for visualization
+                ctx = ExecutionContext(is_interactive=True, show_visualization=not quiet)
+                set_execution_context(ctx)
 
-                elapsed = time.time() - start_time
-                tool_count = _count_tool_calls(thread)
-
-                # Display completion status with metrics
+                # Use execution tree display if visualization enabled
                 if not quiet:
-                    _render_completion_status(elapsed, message_count, tool_count)
+                    display_mode = DisplayMode.VERBOSE if verbose else DisplayMode.MINIMAL
+                    execution_display = ExecutionTreeDisplay(
+                        console=console,
+                        display_mode=display_mode,
+                        show_completion_summary=True,
+                    )
+
+                    await execution_display.start()
+
+                    try:
+                        # Run agent as cancellable task for reliable interrupt handling
+                        agent_task = asyncio.create_task(agent.run(user_input, thread=thread))
+
+                        # Wait for completion with timeout to prevent infinite hangs
+                        try:
+                            response = await asyncio.wait_for(
+                                agent_task, timeout=AGENT_EXECUTION_TIMEOUT_SECONDS
+                            )
+                            message_count += 1
+                        except TimeoutError:
+                            # LLM call timed out after 2 minutes
+                            agent_task.cancel()
+                            try:
+                                await agent_task
+                            except asyncio.CancelledError:
+                                # Task cancellation is expected after timeout; no action needed
+                                pass
+                            await execution_display.stop()
+                            console.print(
+                                f"\n[red]Operation timed out after {int(AGENT_EXECUTION_TIMEOUT_SECONDS)} seconds[/red]\n"
+                                "[dim]This usually indicates an LLM API issue. Try again or check your connection.[/dim]\n"
+                            )
+                            continue
+
+                        # Stop display (shows completion summary)
+                        await execution_display.stop()
+
+                    except KeyboardInterrupt:
+                        # User pressed Ctrl+C - cancel operation and return to prompt
+                        agent_task.cancel()
+                        try:
+                            await agent_task
+                        except asyncio.CancelledError:
+                            pass  # Expected
+
+                        await execution_display.stop()
+                        console.print(
+                            "\n[yellow]Operation cancelled[/yellow] - Press Ctrl+C again to exit\n"
+                        )
+                        continue
+                    except asyncio.CancelledError:
+                        # Task was cancelled
+                        await execution_display.stop()
+                        console.print(
+                            "\n[yellow]Operation cancelled[/yellow] - Press Ctrl+C again to exit\n"
+                        )
+                        continue
+                else:
+                    # Quiet mode - no visualization
+                    try:
+                        agent_task = asyncio.create_task(agent.run(user_input, thread=thread))
+                        response = await agent_task
+                        message_count += 1
+                    except KeyboardInterrupt:
+                        agent_task.cancel()
+                        try:
+                            await agent_task
+                        except asyncio.CancelledError:
+                            # Suppress CancelledError since cancellation is expected after KeyboardInterrupt
+                            pass
+                        console.print(
+                            "\n[yellow]Operation cancelled[/yellow] - Press Ctrl+C again to exit\n"
+                        )
+                        continue
 
                 # Display response
                 if response:
@@ -601,12 +738,18 @@ async def run_chat_mode(
                         console.print(f"[dim]{'─' * console.width}[/dim]")
 
             except KeyboardInterrupt:
-                console.print("\n[dim]Use 'exit' to quit[/dim]")
-                continue
+                # Ctrl+C at prompt (not during execution) - exit gracefully
+                console.print("\n[dim]Exiting...[/dim]")
+                await _auto_save_session(
+                    persistence, thread, message_count, quiet, current_log_file
+                )
+                break
 
             except EOFError:
                 # Auto-save session before exit (Ctrl+D)
-                await _auto_save_session(persistence, thread, message_count, quiet)
+                await _auto_save_session(
+                    persistence, thread, message_count, quiet, current_log_file
+                )
                 console.print("\n[dim]Goodbye! 👋[/dim]")
                 break
 
@@ -656,21 +799,44 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
             sys.exit(1)
 
         # Execute query (single-turn, no thread persistence needed)
-        import time
+        from agent.display import (
+            DisplayMode,
+            ExecutionContext,
+            ExecutionTreeDisplay,
+            set_execution_context,
+        )
 
-        start_time = time.time()
         thread = agent.get_new_thread()
 
-        with console.status("[bold blue]Thinking...", spinner="dots"):
-            response = await agent.run(prompt, thread=thread)
+        # Set execution context for visualization
+        ctx = ExecutionContext(is_interactive=False, show_visualization=not quiet)
+        set_execution_context(ctx)
 
-        elapsed = time.time() - start_time
-        tool_count = _count_tool_calls(thread)
-
-        # Display completion status with metrics
+        # Use execution tree display if visualization enabled
         if not quiet:
-            console.print()  # Add newline before metrics
-            _render_completion_status(elapsed, 1, tool_count)
+            display_mode = DisplayMode.VERBOSE if verbose else DisplayMode.MINIMAL
+            execution_display = ExecutionTreeDisplay(
+                console=console,
+                display_mode=display_mode,
+                show_completion_summary=True,
+            )
+
+            await execution_display.start()
+
+            try:
+                response = await agent.run(prompt, thread=thread)
+
+                # Stop display (shows completion summary with timing)
+                await execution_display.stop()
+
+            except KeyboardInterrupt:
+                # User interrupted - stop display cleanly
+                await execution_display.stop()
+                console.print("\n[yellow]Interrupted by user[/yellow]\n")
+                sys.exit(130)
+        else:
+            # Quiet mode - no visualization
+            response = await agent.run(prompt, thread=thread)
 
         # Display response
         if response:

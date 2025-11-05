@@ -1,5 +1,6 @@
-"""KinD cluster management operations."""
+"""KinD cluster management operations with async subprocess support."""
 
+import asyncio
 import json
 import logging
 import subprocess
@@ -7,6 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
+from agent.utils.async_subprocess import run_async
 from agent.utils.errors import (
     ClusterAlreadyExistsError,
     ClusterAlreadyRunningError,
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class KindManager:
-    """Manager for KinD cluster lifecycle operations."""
+    """Manager for KinD cluster lifecycle operations with async support."""
 
     def __init__(self):
         """Initialize KinD manager."""
@@ -49,13 +51,13 @@ class KindManager:
         except subprocess.TimeoutExpired as e:
             raise KindCommandError("kind version check timed out") from e
 
-    def create_cluster(
+    async def create_cluster(
         self,
         name: str,
         config: str,
         k8s_version: str | None = None,
     ) -> dict:
-        """Create a new KinD cluster.
+        """Create a new KinD cluster asynchronously.
 
         Args:
             name: Cluster name
@@ -74,7 +76,7 @@ class KindManager:
             validate_k8s_version(k8s_version)
 
         # Check if cluster already exists
-        if self.cluster_exists(name):
+        if await self.cluster_exists(name):
             raise ClusterAlreadyExistsError(f"Cluster '{name}' already exists")
 
         # Write config to temporary file
@@ -90,12 +92,12 @@ class KindManager:
 
             logger.info(f"Creating cluster '{name}' with config: {config_path}")
 
-            # Execute command
-            result = subprocess.run(
+            # Execute command asynchronously
+            result = await run_async(
                 cmd,
-                capture_output=True,
-                text=True,
                 timeout=300,  # 5 minutes timeout
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode != 0:
@@ -109,15 +111,15 @@ class KindManager:
                 "cluster_name": name,
                 "status": "running",
                 "kubernetes_version": k8s_version or "latest",
-                "nodes": self._get_node_count(name),
+                "nodes": await self._get_node_count(name),
             }
 
         finally:
             # Clean up temporary config file
             Path(config_path).unlink(missing_ok=True)
 
-    def delete_cluster(self, name: str) -> dict:
-        """Delete a KinD cluster.
+    async def delete_cluster(self, name: str) -> dict:
+        """Delete a KinD cluster asynchronously.
 
         Args:
             name: Cluster name
@@ -131,17 +133,17 @@ class KindManager:
         """
         validate_cluster_name(name)
 
-        if not self.cluster_exists(name):
+        if not await self.cluster_exists(name):
             raise ClusterNotFoundError(f"Cluster '{name}' not found")
 
         try:
             logger.info(f"Deleting cluster '{name}'")
 
-            result = subprocess.run(
+            result = await run_async(
                 ["kind", "delete", "cluster", "--name", name],
-                capture_output=True,
-                text=True,
                 timeout=60,
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode != 0:
@@ -155,11 +157,11 @@ class KindManager:
                 "message": f"Cluster '{name}' deleted successfully",
             }
 
-        except subprocess.TimeoutExpired as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while deleting cluster '{name}'") from e
 
-    def list_clusters(self) -> list[str]:
-        """List all KinD clusters.
+    async def list_clusters(self) -> list[str]:
+        """List all KinD clusters asynchronously.
 
         Returns:
             List of cluster names
@@ -168,11 +170,11 @@ class KindManager:
             KindCommandError: If listing fails
         """
         try:
-            result = subprocess.run(
+            result = await run_async(
                 ["kind", "get", "clusters"],
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode != 0:
@@ -186,11 +188,11 @@ class KindManager:
 
             return clusters
 
-        except subprocess.TimeoutExpired as e:
+        except TimeoutError as e:
             raise KindCommandError("Timeout while listing clusters") from e
 
-    def cluster_exists(self, name: str) -> bool:
-        """Check if a cluster exists.
+    async def cluster_exists(self, name: str) -> bool:
+        """Check if a cluster exists asynchronously.
 
         Args:
             name: Cluster name
@@ -199,13 +201,13 @@ class KindManager:
             True if cluster exists
         """
         try:
-            clusters = self.list_clusters()
+            clusters = await self.list_clusters()
             return name in clusters
         except KindCommandError:
             return False
 
-    def get_kubeconfig(self, name: str) -> str:
-        """Get kubeconfig for a cluster.
+    async def get_kubeconfig(self, name: str) -> str:
+        """Get kubeconfig for a cluster asynchronously.
 
         Args:
             name: Cluster name
@@ -219,15 +221,15 @@ class KindManager:
         """
         validate_cluster_name(name)
 
-        if not self.cluster_exists(name):
+        if not await self.cluster_exists(name):
             raise ClusterNotFoundError(f"Cluster '{name}' not found")
 
         try:
-            result = subprocess.run(
+            result = await run_async(
                 ["kind", "get", "kubeconfig", "--name", name],
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode != 0:
@@ -236,11 +238,11 @@ class KindManager:
 
             return result.stdout
 
-        except subprocess.TimeoutExpired as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while getting kubeconfig for '{name}'") from e
 
-    def start_cluster(self, name: str) -> dict:
-        """Start a stopped KinD cluster.
+    async def start_cluster(self, name: str) -> dict:
+        """Start a stopped KinD cluster asynchronously.
 
         Args:
             name: Cluster name
@@ -256,11 +258,11 @@ class KindManager:
         validate_cluster_name(name)
 
         # Check if cluster containers exist
-        if not self._container_exists(name):
+        if not await self._container_exists(name):
             raise ClusterNotFoundError(f"Cluster '{name}' not found")
 
         # Check if already running
-        if self._is_container_running(self._get_container_name(name)):
+        if await self._is_container_running(self._get_container_name(name)):
             raise ClusterAlreadyRunningError(f"Cluster '{name}' is already running")
 
         try:
@@ -269,15 +271,15 @@ class KindManager:
             start_time = time.time()
 
             # Get all containers for this cluster
-            containers = self._get_all_containers(name)
+            containers = await self._get_all_containers(name)
 
             # Start all containers
             for container in containers:
-                result = subprocess.run(
+                result = await run_async(
                     ["docker", "start", container],
-                    capture_output=True,
-                    text=True,
                     timeout=30,
+                    check=False,
+                    capture_output=True,
                 )
 
                 if result.returncode != 0:
@@ -285,7 +287,7 @@ class KindManager:
                     raise KindCommandError(f"Failed to start container '{container}': {error_msg}")
 
             # Wait for Kubernetes API to be ready
-            self._wait_for_api_ready(name, timeout=60)
+            await self._wait_for_api_ready(name, timeout=60)
 
             startup_time = time.time() - start_time
             logger.info(f"Cluster '{name}' started in {startup_time:.2f} seconds")
@@ -297,10 +299,10 @@ class KindManager:
                 "message": f"Cluster '{name}' started successfully",
             }
 
-        except subprocess.TimeoutExpired as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while starting cluster '{name}'") from e
 
-    def stop_cluster(self, name: str) -> dict:
+    async def stop_cluster(self, name: str) -> dict:
         """Stop a running KinD cluster without deleting it.
 
         Args:
@@ -317,26 +319,26 @@ class KindManager:
         validate_cluster_name(name)
 
         # Check if cluster exists
-        if not self._container_exists(name):
+        if not await self._container_exists(name):
             raise ClusterNotFoundError(f"Cluster '{name}' not found")
 
         # Check if cluster is running
-        if not self._is_container_running(self._get_container_name(name)):
+        if not await self._is_container_running(self._get_container_name(name)):
             raise ClusterNotRunningError(f"Cluster '{name}' is not running")
 
         try:
             logger.info(f"Stopping cluster '{name}'")
 
             # Get all containers for this cluster
-            containers = self._get_all_containers(name)
+            containers = await self._get_all_containers(name)
 
             # Stop all containers gracefully
             for container in containers:
-                result = subprocess.run(
+                result = await run_async(
                     ["docker", "stop", container],
-                    capture_output=True,
-                    text=True,
                     timeout=30,
+                    check=False,
+                    capture_output=True,
                 )
 
                 if result.returncode != 0:
@@ -351,10 +353,10 @@ class KindManager:
                 "message": f"Cluster '{name}' stopped successfully. Data preserved.",
             }
 
-        except subprocess.TimeoutExpired as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while stopping cluster '{name}'") from e
 
-    def restart_cluster(self, name: str) -> dict:
+    async def restart_cluster(self, name: str) -> dict:
         """Restart a KinD cluster (stop + start).
 
         Args:
@@ -369,19 +371,19 @@ class KindManager:
         """
         validate_cluster_name(name)
 
-        if not self._container_exists(name):
+        if not await self._container_exists(name):
             raise ClusterNotFoundError(f"Cluster '{name}' not found")
 
         try:
             logger.info(f"Restarting cluster '{name}'")
 
             # Stop if running
-            if self._is_container_running(self._get_container_name(name)):
-                stop_result = self.stop_cluster(name)
+            if await self._is_container_running(self._get_container_name(name)):
+                stop_result = await self.stop_cluster(name)
                 logger.debug(f"Stop phase: {stop_result['message']}")
 
             # Start the cluster
-            start_result = self.start_cluster(name)
+            start_result = await self.start_cluster(name)
 
             return {
                 "cluster_name": name,
@@ -393,7 +395,7 @@ class KindManager:
         except (ClusterNotRunningError, ClusterAlreadyRunningError):
             # Edge cases: If cluster is already stopped or somehow already running,
             # just ensure it ends up in running state by calling start
-            return self.start_cluster(name)
+            return await self.start_cluster(name)
 
     def _get_container_name(self, cluster_name: str) -> str:
         """Get the main container name for a cluster.
@@ -406,7 +408,7 @@ class KindManager:
         """
         return f"{cluster_name}-control-plane"
 
-    def _get_all_containers(self, cluster_name: str) -> list[str]:
+    async def _get_all_containers(self, cluster_name: str) -> list[str]:
         """Get all container names for a cluster (control-plane + workers).
 
         Args:
@@ -417,7 +419,7 @@ class KindManager:
         """
         try:
             # Find all containers with label for this KinD cluster
-            result = subprocess.run(
+            result = await run_async(
                 [
                     "docker",
                     "ps",
@@ -427,9 +429,9 @@ class KindManager:
                     "--format",
                     "{{.Names}}",
                 ],
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode == 0 and result.stdout.strip():
@@ -439,11 +441,11 @@ class KindManager:
             # Fallback to control-plane only
             return [self._get_container_name(cluster_name)]
 
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except (TimeoutError, FileNotFoundError):
             # Docker not available or timeout - fallback to control-plane only
             return [self._get_container_name(cluster_name)]
 
-    def _container_exists(self, cluster_name: str) -> bool:
+    async def _container_exists(self, cluster_name: str) -> bool:
         """Check if cluster containers exist.
 
         Args:
@@ -454,18 +456,18 @@ class KindManager:
         """
         container_name = self._get_container_name(cluster_name)
         try:
-            result = subprocess.run(
+            result = await run_async(
                 ["docker", "inspect", container_name],
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
             return result.returncode == 0
 
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except (TimeoutError, FileNotFoundError):
             return False
 
-    def _is_container_running(self, container_name: str) -> bool:
+    async def _is_container_running(self, container_name: str) -> bool:
         """Check if a Docker container is running.
 
         Args:
@@ -475,7 +477,7 @@ class KindManager:
             True if container is running
         """
         try:
-            result = subprocess.run(
+            result = await run_async(
                 [
                     "docker",
                     "inspect",
@@ -483,9 +485,9 @@ class KindManager:
                     "{{.State.Running}}",
                     container_name,
                 ],
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode == 0:
@@ -493,10 +495,10 @@ class KindManager:
 
             return False
 
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        except (TimeoutError, FileNotFoundError):
             return False
 
-    def _wait_for_api_ready(self, name: str, timeout: int = 60) -> None:
+    async def _wait_for_api_ready(self, name: str, timeout: int = 60) -> None:
         """Wait for Kubernetes API to be ready after starting cluster.
 
         Args:
@@ -511,28 +513,28 @@ class KindManager:
 
         while time.time() - start_time < timeout:
             try:
-                result = subprocess.run(
+                result = await run_async(
                     ["kubectl", "cluster-info", "--context", context],
-                    capture_output=True,
-                    text=True,
                     timeout=5,
+                    check=False,
+                    capture_output=True,
                 )
 
                 if result.returncode == 0:
                     logger.debug(f"Kubernetes API ready for cluster '{name}'")
                     return
 
-            except subprocess.TimeoutExpired:
+            except TimeoutError:
                 # kubectl command timed out, continue retry loop
                 pass
 
-            time.sleep(2)
+            await asyncio.sleep(2)
 
         raise KindCommandError(
             f"Kubernetes API did not become ready within {timeout} seconds for cluster '{name}'"
         )
 
-    def _get_node_count(self, name: str) -> int:
+    async def _get_node_count(self, name: str) -> int:
         """Get number of nodes in cluster.
 
         Args:
@@ -542,7 +544,7 @@ class KindManager:
             Number of nodes
         """
         try:
-            result = subprocess.run(
+            result = await run_async(
                 [
                     "kubectl",
                     "get",
@@ -552,16 +554,16 @@ class KindManager:
                     "-o",
                     "json",
                 ],
-                capture_output=True,
-                text=True,
                 timeout=10,
+                check=False,
+                capture_output=True,
             )
 
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 return len(data.get("items", []))
 
-        except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError) as e:
+        except (TimeoutError, json.JSONDecodeError, FileNotFoundError) as e:
             logger.warning(
                 f"Failed to get node count for cluster '{name}': {type(e).__name__}: {e}"
             )
