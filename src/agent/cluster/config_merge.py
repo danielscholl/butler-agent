@@ -49,11 +49,11 @@ def merge_addon_requirements(
     merged = copy.deepcopy(base_config)
 
     # Collect all requirements from addons
-    all_containerd_patches = []
-    all_port_mappings = []
-    all_node_labels = {}
-    networking_overrides = {}
-    feature_gates = {}
+    all_containerd_patches: list[str] = []
+    all_port_mappings: list[dict[str, Any]] = []
+    all_node_labels: dict[str, str] = {}
+    networking_overrides: dict[str, Any] = {}
+    feature_gates: dict[str, bool] = {}
 
     for addon_req in addon_requirements:
         # Collect containerd patches
@@ -186,7 +186,8 @@ def _find_control_plane_node(config: dict[str, Any]) -> dict[str, Any] | None:
     Returns:
         Control-plane node dict or None if not found
     """
-    for node in config.get("nodes", []):
+    nodes: list[dict[str, Any]] = config.get("nodes", [])
+    for node in nodes:
         if node.get("role") == "control-plane":
             return node
     return None

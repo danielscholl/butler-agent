@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from agent.cluster.addons.ingress_nginx import IngressNginxAddon  # ensure symbol exists for patching
+from agent.cluster.addons.ingress_nginx import IngressNginxAddon  # noqa: F401 - needed for getattr lookup
 
 logger = logging.getLogger(__name__)
 

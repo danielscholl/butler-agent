@@ -1,6 +1,5 @@
 """Tests for cluster config merge utilities."""
 
-
 from agent.cluster.config_merge import merge_addon_requirements
 
 
