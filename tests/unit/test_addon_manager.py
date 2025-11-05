@@ -61,11 +61,13 @@ async def test_install_addons_empty_list(manager):
 async def test_install_addons_success(mock_addon_class, manager):
     """Test successful addon installation."""
     mock_addon = MagicMock()
-    mock_addon.run = AsyncMock(return_value={
-        "success": True,
-        "addon": "ingress",
-        "message": "Installed successfully",
-    })
+    mock_addon.run = AsyncMock(
+        return_value={
+            "success": True,
+            "addon": "ingress",
+            "message": "Installed successfully",
+        }
+    )
     mock_addon_class.return_value = mock_addon
 
     result = await manager.install_addons(["ingress"])
@@ -82,12 +84,14 @@ async def test_install_addons_success(mock_addon_class, manager):
 async def test_install_addons_failure(mock_addon_class, manager):
     """Test addon installation failure."""
     mock_addon = MagicMock()
-    mock_addon.run = AsyncMock(return_value={
-        "success": False,
-        "addon": "ingress",
-        "error": "Installation failed",
-        "message": "Failed",
-    })
+    mock_addon.run = AsyncMock(
+        return_value={
+            "success": False,
+            "addon": "ingress",
+            "error": "Installation failed",
+            "message": "Failed",
+        }
+    )
     mock_addon_class.return_value = mock_addon
 
     result = await manager.install_addons(["ingress"])
@@ -102,12 +106,14 @@ async def test_install_addons_failure(mock_addon_class, manager):
 async def test_install_addons_already_installed(mock_addon_class, manager):
     """Test addon already installed."""
     mock_addon = MagicMock()
-    mock_addon.run = AsyncMock(return_value={
-        "success": True,
-        "addon": "ingress",
-        "skipped": True,
-        "message": "Already installed",
-    })
+    mock_addon.run = AsyncMock(
+        return_value={
+            "success": True,
+            "addon": "ingress",
+            "skipped": True,
+            "message": "Already installed",
+        }
+    )
     mock_addon_class.return_value = mock_addon
 
     result = await manager.install_addons(["ingress"])
@@ -121,11 +127,13 @@ async def test_install_addons_already_installed(mock_addon_class, manager):
 async def test_install_multiple_addons(mock_addon_class, manager):
     """Test installing multiple addons."""
     mock_addon = MagicMock()
-    mock_addon.run = AsyncMock(return_value={
-        "success": True,
-        "addon": "ingress",
-        "message": "Installed",
-    })
+    mock_addon.run = AsyncMock(
+        return_value={
+            "success": True,
+            "addon": "ingress",
+            "message": "Installed",
+        }
+    )
     mock_addon_class.return_value = mock_addon
 
     # Use aliases to test deduplication

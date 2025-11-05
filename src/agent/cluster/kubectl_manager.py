@@ -1,15 +1,15 @@
 """Kubectl resource management operations with async subprocess support."""
 
-import asyncio
 import json
 import logging
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import yaml
 
-from agent.utils.async_subprocess import run_async, AsyncCompletedProcess
+from agent.utils.async_subprocess import AsyncCompletedProcess, run_async
 from agent.utils.errors import (
     ClusterNotFoundError,
     InvalidManifestError,
@@ -17,6 +17,9 @@ from agent.utils.errors import (
     KubectlCommandError,
     ResourceNotFoundError,
 )
+
+if TYPE_CHECKING:
+    from agent.config import AgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +33,6 @@ class KubectlManager:
         Args:
             config: Agent configuration for path resolution
         """
-        from agent.config import AgentConfig
-
         self.config = config
         self._check_kubectl_available()
 
@@ -103,7 +104,7 @@ class KubectlManager:
                 raise ClusterNotFoundError(
                     f"Cluster '{cluster_name}' is not accessible. It may be stopped or deleted. Try starting it first."
                 )
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise ClusterNotFoundError(
                 f"Timeout connecting to cluster '{cluster_name}'. The cluster may be stopped."
             ) from e
@@ -138,7 +139,7 @@ class KubectlManager:
             )
             return result
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise KubectlCommandError(f"kubectl command timed out after {timeout} seconds") from e
         except FileNotFoundError as e:
             raise KubectlCommandError("kubectl CLI not found in PATH") from e

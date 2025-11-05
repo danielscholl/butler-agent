@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 # Thread-local context variable for execution mode
-_execution_context: contextvars.ContextVar[Optional["ExecutionContext"]] = (
-    contextvars.ContextVar("execution_context", default=None)
+_execution_context: contextvars.ContextVar[Optional["ExecutionContext"]] = contextvars.ContextVar(
+    "execution_context", default=None
 )
 
 
@@ -27,7 +27,7 @@ class ExecutionContext:
     show_visualization: bool = False
 
 
-def set_execution_context(context: Optional[ExecutionContext]) -> None:
+def set_execution_context(context: ExecutionContext | None) -> None:
     """Set the execution context for the current async context.
 
     Args:
@@ -51,7 +51,7 @@ def set_execution_context(context: Optional[ExecutionContext]) -> None:
         emitter.set_interactive_mode(context.is_interactive, context.show_visualization)
 
 
-def get_execution_context() -> Optional[ExecutionContext]:
+def get_execution_context() -> ExecutionContext | None:
     """Get the current execution context.
 
     Returns:

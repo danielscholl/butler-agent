@@ -1,8 +1,6 @@
 """Tests for BaseAddon abstract class."""
 
-import asyncio
 import logging
-import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -81,7 +79,7 @@ async def test_run_helm_failure(mock_run, addon):
 @patch("agent.cluster.addons.base.run_async", new_callable=AsyncMock)
 async def test_run_helm_timeout(mock_run, addon):
     """Test helm command timeout."""
-    mock_run.side_effect = asyncio.TimeoutError()
+    mock_run.side_effect = TimeoutError()
 
     with pytest.raises(HelmCommandError, match="timed out"):
         await addon._run_helm(["version"])

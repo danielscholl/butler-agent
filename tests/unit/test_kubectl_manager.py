@@ -3,12 +3,11 @@
 import json
 import subprocess
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
+from unittest.mock import MagicMock, Mock, mock_open, patch
 
 import pytest
 
 from agent.cluster.kubectl_manager import KubectlManager
-from agent.config import AgentConfig
 from agent.utils.async_subprocess import AsyncCompletedProcess
 from agent.utils.errors import (
     ClusterNotFoundError,
@@ -106,7 +105,9 @@ class TestKubectlManager:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_validate_kubeconfig_cluster_not_accessible(self, mock_run, mock_run_async, mock_config):
+    async def test_validate_kubeconfig_cluster_not_accessible(
+        self, mock_run, mock_run_async, mock_config
+    ):
         """Test cluster not accessible."""
         # First call for __init__
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
@@ -271,7 +272,9 @@ class TestKubectlManager:
     @patch("agent.cluster.kubectl_manager.subprocess.run")
     @patch("builtins.open", new_callable=mock_open)
     @patch("agent.cluster.kubectl_manager.tempfile.NamedTemporaryFile")
-    async def test_apply_manifest_success(self, mock_tempfile, mock_file, mock_run, mock_run_async, mock_config):
+    async def test_apply_manifest_success(
+        self, mock_tempfile, mock_file, mock_run, mock_run_async, mock_config
+    ):
         """Test successful manifest application."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
         manager = KubectlManager(mock_config)
@@ -525,7 +528,9 @@ metadata:
         ]
 
         with patch.object(Path, "exists", return_value=True):
-            result = await manager.get_logs("test-cluster", "test-pod", container="app", tail_lines=50)
+            result = await manager.get_logs(
+                "test-cluster", "test-pod", container="app", tail_lines=50
+            )
 
         assert result["container"] == "app"
 

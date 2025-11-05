@@ -7,7 +7,6 @@ import asyncio
 import logging
 from datetime import datetime
 from enum import Enum
-from typing import Optional
 
 from rich.console import Console, Group, RenderableType
 from rich.live import Live
@@ -71,13 +70,13 @@ class TreeNode:
         self.children: list[TreeNode] = []
         self.metadata: dict = {}
         self.start_time = datetime.now()
-        self.end_time: Optional[datetime] = None
+        self.end_time: datetime | None = None
 
     def add_child(self, child: "TreeNode") -> None:
         """Add a child node."""
         self.children.append(child)
 
-    def complete(self, summary: Optional[str] = None, duration: Optional[float] = None) -> None:
+    def complete(self, summary: str | None = None, duration: float | None = None) -> None:
         """Mark node as completed.
 
         Args:
@@ -91,7 +90,7 @@ class TreeNode:
         if duration is not None:
             self.metadata["duration"] = duration
 
-    def mark_error(self, error_message: str, duration: Optional[float] = None) -> None:
+    def mark_error(self, error_message: str, duration: float | None = None) -> None:
         """Mark node as error.
 
         Args:
@@ -120,10 +119,10 @@ class ExecutionPhase:
             phase_number: Sequential number for this phase
         """
         self.phase_number = phase_number
-        self.llm_node: Optional[TreeNode] = None
+        self.llm_node: TreeNode | None = None
         self.tool_nodes: list[TreeNode] = []
         self.start_time = datetime.now()
-        self.end_time: Optional[datetime] = None
+        self.end_time: datetime | None = None
         self.status = "in_progress"
 
     def add_llm_node(self, node: TreeNode) -> None:
@@ -160,7 +159,7 @@ class ExecutionTreeDisplay:
 
     def __init__(
         self,
-        console: Optional[Console] = None,
+        console: Console | None = None,
         display_mode: DisplayMode = DisplayMode.MINIMAL,
         show_completion_summary: bool = True,
     ):
@@ -174,15 +173,15 @@ class ExecutionTreeDisplay:
         self.console = console or Console()
         self.display_mode = display_mode
         self.show_completion_summary = show_completion_summary
-        self._live: Optional[Live] = None
+        self._live: Live | None = None
         self._node_map: dict[str, TreeNode] = {}
         self._event_emitter: EventEmitter = get_event_emitter()
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._running = False
 
         # Phase tracking
         self._phases: list[ExecutionPhase] = []
-        self._current_phase: Optional[ExecutionPhase] = None
+        self._current_phase: ExecutionPhase | None = None
         self._session_start_time = datetime.now()
 
     def _render_node(self, node: TreeNode) -> RenderableType:
@@ -233,7 +232,7 @@ class ExecutionTreeDisplay:
         if not self._phases:
             return Text(f"{SYMBOL_ACTIVE} Thinking...", style=COLOR_ACTIVE)
 
-        renderables = []
+        renderables: list[RenderableType] = []
 
         # Calculate session progress
         completed_count = sum(1 for p in self._phases if p.status == "completed")
@@ -417,7 +416,7 @@ class ExecutionTreeDisplay:
                 # Get events with timeout to allow checking _running flag
                 try:
                     event = await asyncio.wait_for(self._event_emitter.get_event(), timeout=0.1)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
                 await self._handle_event(event)

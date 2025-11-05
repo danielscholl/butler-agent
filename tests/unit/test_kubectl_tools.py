@@ -50,13 +50,15 @@ class TestKubectlTools:
 
         # Mock manager response
         mock_manager = Mock()
-        mock_manager.get_resources = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "resource_type": "pods",
-            "namespace": "default",
-            "resources": [{"metadata": {"name": "pod-1"}}],
-            "count": 1,
-        })
+        mock_manager.get_resources = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "resource_type": "pods",
+                "namespace": "default",
+                "resources": [{"metadata": {"name": "pod-1"}}],
+                "count": 1,
+            }
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_get_resources("test-cluster", "pods")
@@ -76,14 +78,16 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.get_resources = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "resource_type": "pods",
-            "namespace": "kube-system",
-            "label_selector": "app=nginx",
-            "resources": [],
-            "count": 0,
-        })
+        mock_manager.get_resources = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "resource_type": "pods",
+                "namespace": "kube-system",
+                "label_selector": "app=nginx",
+                "resources": [],
+                "count": 0,
+            }
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_get_resources(
@@ -99,13 +103,17 @@ class TestKubectlTools:
     @patch("agent.cluster.tools.KubectlManager")
     @patch("agent.cluster.tools.KindManager")
     @patch("agent.cluster.tools.ClusterStatus")
-    async def test_kubectl_get_resources_kubeconfig_not_found(self, mock_status, mock_kind, mock_kubectl):
+    async def test_kubectl_get_resources_kubeconfig_not_found(
+        self, mock_status, mock_kind, mock_kubectl
+    ):
         """Test kubectl_get_resources with missing kubeconfig."""
         config = Mock(spec=AgentConfig)
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.get_resources = AsyncMock(side_effect=KubeconfigNotFoundError("Kubeconfig not found"))
+        mock_manager.get_resources = AsyncMock(
+            side_effect=KubeconfigNotFoundError("Kubeconfig not found")
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_get_resources("test-cluster", "pods")
@@ -124,13 +132,15 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.apply_manifest = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "namespace": "default",
-            "applied": True,
-            "resources": ["deployment.apps/nginx created"],
-            "output": "deployment.apps/nginx created",
-        })
+        mock_manager.apply_manifest = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "namespace": "default",
+                "applied": True,
+                "resources": ["deployment.apps/nginx created"],
+                "output": "deployment.apps/nginx created",
+            }
+        )
         tools._kubectl_manager = mock_manager
 
         manifest = "apiVersion: v1\nkind: Pod\nmetadata:\n  name: test"
@@ -151,7 +161,9 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.apply_manifest = AsyncMock(side_effect=InvalidManifestError("Invalid YAML manifest"))
+        mock_manager.apply_manifest = AsyncMock(
+            side_effect=InvalidManifestError("Invalid YAML manifest")
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_apply("test-cluster", "invalid yaml:")
@@ -169,14 +181,16 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.delete_resource = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "resource_type": "deployment",
-            "name": "nginx",
-            "namespace": "default",
-            "deleted": True,
-            "message": "Successfully deleted deployment/nginx",
-        })
+        mock_manager.delete_resource = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "resource_type": "deployment",
+                "name": "nginx",
+                "namespace": "default",
+                "deleted": True,
+                "message": "Successfully deleted deployment/nginx",
+            }
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_delete("test-cluster", "deployment", "nginx")
@@ -196,14 +210,16 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.delete_resource = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "resource_type": "pod",
-            "name": "broken-pod",
-            "namespace": "default",
-            "deleted": True,
-            "message": "Successfully deleted pod/broken-pod",
-        })
+        mock_manager.delete_resource = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "resource_type": "pod",
+                "name": "broken-pod",
+                "namespace": "default",
+                "deleted": True,
+                "message": "Successfully deleted pod/broken-pod",
+            }
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_delete("test-cluster", "pod", "broken-pod", force=True)
@@ -223,14 +239,16 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.get_logs = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "pod_name": "test-pod",
-            "namespace": "default",
-            "container": None,
-            "logs": "log line 1\nlog line 2",
-            "lines": 2,
-        })
+        mock_manager.get_logs = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "pod_name": "test-pod",
+                "namespace": "default",
+                "container": None,
+                "logs": "log line 1\nlog line 2",
+                "lines": 2,
+            }
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_logs("test-cluster", "test-pod")
@@ -252,17 +270,21 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.get_logs = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "pod_name": "test-pod",
-            "namespace": "default",
-            "container": "app",
-            "logs": "container logs",
-            "lines": 1,
-        })
+        mock_manager.get_logs = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "pod_name": "test-pod",
+                "namespace": "default",
+                "container": "app",
+                "logs": "container logs",
+                "lines": 1,
+            }
+        )
         tools._kubectl_manager = mock_manager
 
-        result = await tools.kubectl_logs("test-cluster", "test-pod", container="app", tail_lines=50)
+        result = await tools.kubectl_logs(
+            "test-cluster", "test-pod", container="app", tail_lines=50
+        )
 
         assert result["container"] == "app"
         mock_manager.get_logs.assert_called_once_with(
@@ -279,7 +301,9 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.get_logs = AsyncMock(side_effect=ResourceNotFoundError("Pod 'test-pod' not found"))
+        mock_manager.get_logs = AsyncMock(
+            side_effect=ResourceNotFoundError("Pod 'test-pod' not found")
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_logs("test-cluster", "test-pod")
@@ -297,13 +321,15 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.describe_resource = AsyncMock(return_value={
-            "cluster_name": "test-cluster",
-            "resource_type": "pod",
-            "name": "nginx",
-            "namespace": "default",
-            "description": "Name: nginx\nStatus: Running",
-        })
+        mock_manager.describe_resource = AsyncMock(
+            return_value={
+                "cluster_name": "test-cluster",
+                "resource_type": "pod",
+                "name": "nginx",
+                "namespace": "default",
+                "description": "Name: nginx\nStatus: Running",
+            }
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_describe("test-cluster", "pod", "nginx")
@@ -324,9 +350,9 @@ class TestKubectlTools:
         tools.initialize_tools(config)
 
         mock_manager = Mock()
-        mock_manager.describe_resource = AsyncMock(side_effect=ResourceNotFoundError(
-            "Resource pod/nginx not found"
-        ))
+        mock_manager.describe_resource = AsyncMock(
+            side_effect=ResourceNotFoundError("Resource pod/nginx not found")
+        )
         tools._kubectl_manager = mock_manager
 
         result = await tools.kubectl_describe("test-cluster", "pod", "nginx")
@@ -367,7 +393,9 @@ class TestKubectlTools:
     @patch("agent.cluster.tools.KubectlManager")
     @patch("agent.cluster.tools.KindManager")
     @patch("agent.cluster.tools.ClusterStatus")
-    async def test_kubectl_tools_return_dicts_not_exceptions(self, mock_status, mock_kind, mock_kubectl):
+    async def test_kubectl_tools_return_dicts_not_exceptions(
+        self, mock_status, mock_kind, mock_kubectl
+    ):
         """Test that kubectl tools always return dicts, never raise exceptions."""
         config = Mock(spec=AgentConfig)
         tools.initialize_tools(config)

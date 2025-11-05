@@ -1,6 +1,5 @@
 """Base addon class for all cluster add-ons."""
 
-import asyncio
 import logging
 import os
 from abc import ABC, abstractmethod
@@ -88,7 +87,7 @@ class BaseAddon(ABC):
 
             return result
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise HelmCommandError(f"Helm command timed out after {timeout} seconds") from e
         except FileNotFoundError as e:
             raise HelmCommandError(
@@ -300,7 +299,9 @@ class BaseAddon(ABC):
         # Get parent tool event ID from context (automatically set by middleware)
         parent_id = get_current_tool_event_id()
         if parent_id:
-            logger.debug(f"Addon {self.addon_name} nesting under parent tool (id: {parent_id[:8]}...)")
+            logger.debug(
+                f"Addon {self.addon_name} nesting under parent tool (id: {parent_id[:8]}...)"
+            )
         else:
             logger.debug(f"Addon {self.addon_name} running without parent context")
 
@@ -345,7 +346,7 @@ class BaseAddon(ABC):
                     error_event = AddonProgressEvent(
                         addon_name=self.addon_name,
                         status="error",
-                        message=f"Installation failed",
+                        message="Installation failed",
                         duration=duration,
                         parent_id=parent_id,
                     )

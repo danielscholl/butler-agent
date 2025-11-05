@@ -141,7 +141,9 @@ async def logging_function_middleware(
         else:
             args_dict = {}
         # Sanitize (remove sensitive keys)
-        safe_args = {k: v for k, v in args_dict.items() if k not in ["token", "api_key", "password"]}
+        safe_args = {
+            k: v for k, v in args_dict.items() if k not in ["token", "api_key", "password"]
+        }
 
         event = ToolStartEvent(tool_name=tool_name, arguments=safe_args)
         tool_event_id = event.event_id
@@ -205,9 +207,9 @@ def _extract_tool_summary(tool_name: str, result: Any) -> str:
     """
     if isinstance(result, dict):
         if "message" in result:
-            return result["message"]
+            return str(result["message"])
         elif "summary" in result:
-            return result["summary"]
+            return str(result["summary"])
         elif "cluster_name" in result:
             return f"Cluster '{result['cluster_name']}' ready"
     return "Complete"

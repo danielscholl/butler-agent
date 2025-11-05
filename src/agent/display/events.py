@@ -10,7 +10,7 @@ import contextvars
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -25,7 +25,7 @@ class ExecutionEvent:
 
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=datetime.now)
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
 
 
 @dataclass
@@ -60,7 +60,7 @@ class ToolStartEvent(ExecutionEvent):
     """
 
     tool_name: str = ""
-    arguments: Optional[dict[str, Any]] = None
+    arguments: dict[str, Any] | None = None
 
 
 @dataclass
@@ -107,7 +107,7 @@ class AddonProgressEvent(ExecutionEvent):
     addon_name: str = ""
     status: str = ""  # starting, installing, waiting, complete, error
     message: str = ""
-    duration: Optional[float] = None
+    duration: float | None = None
 
 
 class EventEmitter:
@@ -158,7 +158,7 @@ class EventEmitter:
         """
         return await self._queue.get()
 
-    def get_event_nowait(self) -> Optional[ExecutionEvent]:
+    def get_event_nowait(self) -> ExecutionEvent | None:
         """Get next event without blocking.
 
         Returns:
@@ -218,7 +218,7 @@ class EventEmitter:
 
 
 # Global singleton instance
-_event_emitter: Optional[EventEmitter] = None
+_event_emitter: EventEmitter | None = None
 
 
 def get_event_emitter() -> EventEmitter:
@@ -238,12 +238,12 @@ def get_event_emitter() -> EventEmitter:
 # ============================================================================
 
 # ContextVar for propagating current tool event ID to child operations
-_current_tool_event_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_current_tool_event_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "current_tool_event_id", default=None
 )
 
 
-def set_current_tool_event_id(event_id: Optional[str]) -> None:
+def set_current_tool_event_id(event_id: str | None) -> None:
     """Set the current tool event ID for child event nesting.
 
     This allows child operations (like addon installations) to automatically
@@ -255,7 +255,7 @@ def set_current_tool_event_id(event_id: Optional[str]) -> None:
     _current_tool_event_id.set(event_id)
 
 
-def get_current_tool_event_id() -> Optional[str]:
+def get_current_tool_event_id() -> str | None:
     """Get the current tool event ID for child event nesting.
 
     Returns:

@@ -1,6 +1,5 @@
 """NGINX Ingress Controller addon."""
 
-import asyncio
 import os
 from pathlib import Path
 from typing import Any
@@ -245,7 +244,7 @@ class IngressNginxAddon(BaseAddon):
                 self.log_warn(f"Wait failed: {result.stderr}")
                 return False
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.log_warn(f"Timeout waiting for deployment (>{timeout}s)")
             return False
         except Exception as e:

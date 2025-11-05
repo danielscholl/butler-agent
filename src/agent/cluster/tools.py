@@ -1030,7 +1030,9 @@ async def kubectl_describe(
             f"namespace '{namespace}'"
         )
 
-        result = await _kubectl_manager.describe_resource(cluster_name, resource_type, name, namespace)
+        result = await _kubectl_manager.describe_resource(
+            cluster_name, resource_type, name, namespace
+        )
 
         result["message"] = (
             f"Retrieved description for {resource_type}/{name} in cluster '{cluster_name}', "

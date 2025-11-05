@@ -157,7 +157,7 @@ class KindManager:
                 "message": f"Cluster '{name}' deleted successfully",
             }
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while deleting cluster '{name}'") from e
 
     async def list_clusters(self) -> list[str]:
@@ -188,7 +188,7 @@ class KindManager:
 
             return clusters
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise KindCommandError("Timeout while listing clusters") from e
 
     async def cluster_exists(self, name: str) -> bool:
@@ -238,7 +238,7 @@ class KindManager:
 
             return result.stdout
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while getting kubeconfig for '{name}'") from e
 
     async def start_cluster(self, name: str) -> dict:
@@ -299,7 +299,7 @@ class KindManager:
                 "message": f"Cluster '{name}' started successfully",
             }
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while starting cluster '{name}'") from e
 
     async def stop_cluster(self, name: str) -> dict:
@@ -353,7 +353,7 @@ class KindManager:
                 "message": f"Cluster '{name}' stopped successfully. Data preserved.",
             }
 
-        except asyncio.TimeoutError as e:
+        except TimeoutError as e:
             raise KindCommandError(f"Timeout while stopping cluster '{name}'") from e
 
     async def restart_cluster(self, name: str) -> dict:
@@ -441,7 +441,7 @@ class KindManager:
             # Fallback to control-plane only
             return [self._get_container_name(cluster_name)]
 
-        except (asyncio.TimeoutError, FileNotFoundError):
+        except (TimeoutError, FileNotFoundError):
             # Docker not available or timeout - fallback to control-plane only
             return [self._get_container_name(cluster_name)]
 
@@ -464,7 +464,7 @@ class KindManager:
             )
             return result.returncode == 0
 
-        except (asyncio.TimeoutError, FileNotFoundError):
+        except (TimeoutError, FileNotFoundError):
             return False
 
     async def _is_container_running(self, container_name: str) -> bool:
@@ -495,7 +495,7 @@ class KindManager:
 
             return False
 
-        except (asyncio.TimeoutError, FileNotFoundError):
+        except (TimeoutError, FileNotFoundError):
             return False
 
     async def _wait_for_api_ready(self, name: str, timeout: int = 60) -> None:
@@ -524,7 +524,7 @@ class KindManager:
                     logger.debug(f"Kubernetes API ready for cluster '{name}'")
                     return
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # kubectl command timed out, continue retry loop
                 pass
 
@@ -563,7 +563,7 @@ class KindManager:
                 data = json.loads(result.stdout)
                 return len(data.get("items", []))
 
-        except (asyncio.TimeoutError, json.JSONDecodeError, FileNotFoundError) as e:
+        except (TimeoutError, json.JSONDecodeError, FileNotFoundError) as e:
             logger.warning(
                 f"Failed to get node count for cluster '{name}': {type(e).__name__}: {e}"
             )

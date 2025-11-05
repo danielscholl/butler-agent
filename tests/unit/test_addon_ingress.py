@@ -1,7 +1,5 @@
 """Tests for NGINX Ingress addon."""
 
-import asyncio
-import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -179,7 +177,7 @@ async def test_wait_for_ready_success(mock_run, ingress_addon):
 @patch("agent.cluster.addons.ingress_nginx.run_async", new_callable=AsyncMock)
 async def test_wait_for_ready_timeout(mock_run, ingress_addon):
     """Test wait timeout."""
-    mock_run.side_effect = asyncio.TimeoutError()
+    mock_run.side_effect = TimeoutError()
 
     result = await ingress_addon.wait_for_ready(timeout=60)
 

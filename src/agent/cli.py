@@ -71,7 +71,11 @@ def _get_last_session() -> str | None:
 
 
 async def _auto_save_session(
-    persistence: Any, thread: Any, message_count: int, quiet: bool = False, log_file: Path | None = None
+    persistence: Any,
+    thread: Any,
+    message_count: int,
+    quiet: bool = False,
+    log_file: Path | None = None,
 ) -> None:
     """Auto-save the current session on exit.
 
@@ -123,7 +127,9 @@ def _cleanup_old_logs(log_dir: Path, keep: int = 10) -> None:
         keep: Number of recent log files to keep
     """
     try:
-        log_files = sorted(log_dir.glob("butler-*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        log_files = sorted(
+            log_dir.glob("butler-*.log"), key=lambda p: p.stat().st_mtime, reverse=True
+        )
 
         # Delete old files beyond the keep limit
         for old_file in log_files[keep:]:
@@ -498,7 +504,9 @@ async def run_chat_mode(
 
                 if cmd in ["exit", "quit", "q"]:
                     # Auto-save session before exit
-                    await _auto_save_session(persistence, thread, message_count, quiet, current_log_file)
+                    await _auto_save_session(
+                        persistence, thread, message_count, quiet, current_log_file
+                    )
                     console.print("[dim]Goodbye! 👋[/dim]")
                     break
 
@@ -626,7 +634,6 @@ async def run_chat_mode(
                     continue
 
                 # Execute query with conversation thread
-                import time
 
                 from agent.display import (
                     DisplayMode,
@@ -634,8 +641,6 @@ async def run_chat_mode(
                     ExecutionTreeDisplay,
                     set_execution_context,
                 )
-
-                start_time = time.time()
 
                 # Set execution context for visualization
                 ctx = ExecutionContext(is_interactive=True, show_visualization=not quiet)
@@ -660,7 +665,7 @@ async def run_chat_mode(
                         try:
                             response = await asyncio.wait_for(agent_task, timeout=120.0)
                             message_count += 1
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             # LLM call timed out after 2 minutes
                             agent_task.cancel()
                             try:
@@ -714,8 +719,6 @@ async def run_chat_mode(
                         )
                         continue
 
-                elapsed = time.time() - start_time
-
                 # Display response
                 if response:
                     console.print()
@@ -729,12 +732,16 @@ async def run_chat_mode(
             except KeyboardInterrupt:
                 # Ctrl+C at prompt (not during execution) - exit gracefully
                 console.print("\n[dim]Exiting...[/dim]")
-                await _auto_save_session(persistence, thread, message_count, quiet, current_log_file)
+                await _auto_save_session(
+                    persistence, thread, message_count, quiet, current_log_file
+                )
                 break
 
             except EOFError:
                 # Auto-save session before exit (Ctrl+D)
-                await _auto_save_session(persistence, thread, message_count, quiet, current_log_file)
+                await _auto_save_session(
+                    persistence, thread, message_count, quiet, current_log_file
+                )
                 console.print("\n[dim]Goodbye! 👋[/dim]")
                 break
 

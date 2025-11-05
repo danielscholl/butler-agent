@@ -7,7 +7,6 @@ the event loop to continue running during long-running operations.
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +82,7 @@ async def run_async(
                 )
             else:
                 stdout_bytes, stderr_bytes = await process.communicate()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Kill the process on timeout
             process.kill()
             await process.wait()
@@ -117,7 +116,7 @@ async def run_async(
 
         return result
 
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         logger.error(f"Command not found: {cmd[0]}")
         raise
     except Exception as e:
@@ -175,7 +174,7 @@ async def run_shell_async(
                 )
             else:
                 stdout_bytes, stderr_bytes = await process.communicate()
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Kill the process on timeout
             process.kill()
             await process.wait()
