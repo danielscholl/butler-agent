@@ -108,12 +108,66 @@ def create_cluster(
         # Use configured default version if not specified
         k8s_version = kubernetes_version or _config.default_k8s_version
 
+        # PHASE 1: Collect and merge addon configuration requirements (pre-cluster creation)
+        if addons:
+            from agent.cluster.config_merge import merge_addon_requirements
+
+            logger.info(f"Collecting configuration requirements from {len(addons)} addon(s)")
+
+            # Temporary addon manager to get addon classes (no kubeconfig yet)
+            temp_manager = AddonManager(name, Path("/tmp/placeholder"))
+
+            addon_requirements = []
+            for addon_name in addons:
+                try:
+                    # Validate addon name
+                    normalized_name = temp_manager._validate_addon_name(addon_name)
+                    canonical_name = temp_manager._alias_map[normalized_name]
+
+                    # Get temporary addon instance for config collection
+                    # Note: kubeconfig path is ignored for pre-creation methods
+                    temp_addon = temp_manager._get_addon_instance(canonical_name, None)
+
+                    # Collect all requirements from this addon
+                    addon_req = {}
+
+                    # Cluster config requirements
+                    config_req = temp_addon.get_cluster_config_requirements()
+                    if config_req:
+                        addon_req.update(config_req)
+
+                    # Port requirements
+                    port_req = temp_addon.get_port_requirements()
+                    if port_req:
+                        addon_req["port_mappings"] = port_req
+
+                    # Node label requirements
+                    label_req = temp_addon.get_node_labels()
+                    if label_req:
+                        addon_req["node_labels"] = label_req
+
+                    if addon_req:
+                        addon_requirements.append(addon_req)
+                        logger.debug(f"Addon '{addon_name}' has configuration requirements")
+
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to collect config requirements from addon '{addon_name}': {e}"
+                    )
+
+            # Merge all addon requirements into cluster config
+            if addon_requirements:
+                cluster_config = merge_addon_requirements(cluster_config, addon_requirements)
+                logger.info(
+                    f"Merged configuration requirements from {len(addon_requirements)} addon(s)"
+                )
+
         logger.info(
             f"Creating cluster '{name}' with config '{config}' ({config_source}), "
             f"version {k8s_version}"
         )
 
-        # Create cluster
+        # Create cluster with merged configuration
         result = _kind_manager.create_cluster(name, cluster_config, k8s_version)
 
         # Export and save kubeconfig if data directory is configured
@@ -135,7 +189,7 @@ def create_cluster(
 
         result["config_source"] = config_source
 
-        # Install add-ons if specified (only if kubeconfig was saved successfully)
+        # PHASE 2: Install add-ons (post-cluster creation, only if kubeconfig saved successfully)
         if addons and result.get("kubeconfig_path"):
             logger.info(f"Installing {len(addons)} add-on(s): {', '.join(addons)}")
             addon_manager = AddonManager(name, Path(result["kubeconfig_path"]))

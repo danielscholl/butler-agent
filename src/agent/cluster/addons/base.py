@@ -143,6 +143,76 @@ class BaseAddon(ABC):
         self.log_info(f"Installing Helm chart: {chart}")
         self._run_helm(cmd_args, timeout=300)  # 5 minute timeout for installation
 
+    def get_cluster_config_requirements(self) -> dict[str, Any]:
+        """Return cluster config patches needed before cluster creation.
+
+        This method is called BEFORE the cluster is created to gather any
+        configuration requirements that must be baked into the Kind cluster config.
+
+        Override this for addons that need cluster-level configuration like:
+        - containerd patches for container registries
+        - feature gates for alpha/beta Kubernetes features
+        - network configuration changes
+
+        Returns:
+            Dict with optional keys:
+            - containerdConfigPatches: list[str] - containerd config patches
+            - networking: dict - networking configuration overrides
+            - featureGates: dict[str, bool] - Kubernetes feature gates
+
+        Example:
+            {
+                "containerdConfigPatches": [
+                    '[plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:5000"]\\n  endpoint = ["http://registry:5000"]'
+                ]
+            }
+        """
+        return {}
+
+    def get_port_requirements(self) -> list[dict[str, Any]]:
+        """Return port mappings needed for this addon.
+
+        This method is called BEFORE the cluster is created to gather port mapping
+        requirements. Port mappings are applied to the control-plane node's
+        extraPortMappings configuration.
+
+        Override this for addons that need host port access like:
+        - Ingress controllers (80, 443)
+        - Registries (5000, 5001)
+        - Gateway API controllers (custom ports)
+
+        Returns:
+            List of port mapping dicts with keys:
+            - containerPort: int - Port inside the container
+            - hostPort: int - Port on the host machine
+            - protocol: str - "TCP" or "UDP"
+
+        Example:
+            [
+                {"containerPort": 80, "hostPort": 80, "protocol": "TCP"},
+                {"containerPort": 443, "hostPort": 443, "protocol": "TCP"}
+            ]
+        """
+        return []
+
+    def get_node_labels(self) -> dict[str, str]:
+        """Return node labels needed for this addon.
+
+        This method is called BEFORE the cluster is created to gather node label
+        requirements. Labels are applied to control-plane nodes via kubeletExtraArgs.
+
+        Override this for addons that need specific node labels like:
+        - Ingress controllers (ingress-ready=true)
+        - Storage classes (specific node capabilities)
+
+        Returns:
+            Dict of label key-value pairs
+
+        Example:
+            {"ingress-ready": "true", "storage-class": "local"}
+        """
+        return {}
+
     @abstractmethod
     def check_prerequisites(self) -> bool:
         """Check if prerequisites for addon installation are met.

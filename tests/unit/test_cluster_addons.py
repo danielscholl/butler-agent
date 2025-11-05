@@ -68,18 +68,30 @@ def test_create_cluster_without_addons(mock_write, mock_mkdir, mock_get_config, 
 def test_create_cluster_with_addons(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
-    """Test cluster creation with add-ons."""
+    """Test cluster creation with add-ons (two-phase pattern)."""
     _ = setup_tools  # noqa: F841
-    mock_get_config.return_value = ("fake-config", "built-in default")
+    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
 
-    # Mock addon manager
+    # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
+
+    # Phase 1: Config collection
+    mock_addon_manager._validate_addon_name.return_value = "ingress"
+    mock_addon_manager._alias_map = {"ingress": "ingress"}
+    mock_addon_instance = MagicMock()
+    mock_addon_instance.get_cluster_config_requirements.return_value = {}
+    mock_addon_instance.get_port_requirements.return_value = []
+    mock_addon_instance.get_node_labels.return_value = {}
+    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+
+    # Phase 2: Installation
     mock_addon_manager.install_addons.return_value = {
         "success": True,
         "results": {"ingress": {"success": True, "message": "Installed"}},
         "failed": [],
         "message": "Addons: 1/1 succeeded",
     }
+
     mock_addon_manager_class.return_value = mock_addon_manager
 
     result = create_cluster("test", "default", addons=["ingress"])
@@ -89,8 +101,8 @@ def test_create_cluster_with_addons(
     assert result["addons_installed"]["success"] is True
     assert "Addons: 1/1 succeeded" in result.get("message", "")
 
-    # Verify addon manager was created and used
-    mock_addon_manager_class.assert_called_once()
+    # Verify addon manager was created twice (Phase 1 and Phase 2)
+    assert mock_addon_manager_class.call_count == 2
     mock_addon_manager.install_addons.assert_called_once_with(["ingress"])
 
 
@@ -102,10 +114,21 @@ def test_create_cluster_addon_failure(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation when addon fails (cluster should still succeed)."""
-    mock_get_config.return_value = ("fake-config", "built-in default")
+    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
 
-    # Mock addon manager with failure
+    # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
+
+    # Phase 1: Config collection
+    mock_addon_manager._validate_addon_name.return_value = "ingress"
+    mock_addon_manager._alias_map = {"ingress": "ingress"}
+    mock_addon_instance = MagicMock()
+    mock_addon_instance.get_cluster_config_requirements.return_value = {}
+    mock_addon_instance.get_port_requirements.return_value = []
+    mock_addon_instance.get_node_labels.return_value = {}
+    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+
+    # Phase 2: Installation with failure
     mock_addon_manager.install_addons.return_value = {
         "success": False,
         "results": {"ingress": {"success": False, "error": "Install failed"}},
@@ -133,10 +156,24 @@ def test_create_cluster_multiple_addons(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation with multiple add-ons."""
-    mock_get_config.return_value = ("fake-config", "built-in default")
+    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
 
-    # Mock addon manager with multiple addons
+    # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
+
+    # Phase 1: Config collection (support both ingress and registry)
+    def validate_addon_name(name):
+        return name
+
+    mock_addon_manager._validate_addon_name.side_effect = validate_addon_name
+    mock_addon_manager._alias_map = {"ingress": "ingress", "registry": "registry"}
+    mock_addon_instance = MagicMock()
+    mock_addon_instance.get_cluster_config_requirements.return_value = {}
+    mock_addon_instance.get_port_requirements.return_value = []
+    mock_addon_instance.get_node_labels.return_value = {}
+    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+
+    # Phase 2: Installation with multiple addons
     mock_addon_manager.install_addons.return_value = {
         "success": True,
         "results": {
@@ -157,12 +194,24 @@ def test_create_cluster_multiple_addons(
 @patch("agent.cluster.tools.get_cluster_config")
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
+@patch("agent.cluster.tools.AddonManager")
 def test_create_cluster_addon_without_kubeconfig(
-    mock_write, mock_mkdir, mock_get_config, setup_tools
+    mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test that addons are skipped if kubeconfig is not saved."""
     mocks = setup_tools
-    mock_get_config.return_value = ("fake-config", "built-in default")
+    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
+
+    # Mock addon manager for Phase 1 (config collection still happens)
+    mock_addon_manager = MagicMock()
+    mock_addon_manager._validate_addon_name.return_value = "ingress"
+    mock_addon_manager._alias_map = {"ingress": "ingress"}
+    mock_addon_instance = MagicMock()
+    mock_addon_instance.get_cluster_config_requirements.return_value = {}
+    mock_addon_instance.get_port_requirements.return_value = []
+    mock_addon_instance.get_node_labels.return_value = {}
+    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+    mock_addon_manager_class.return_value = mock_addon_manager
 
     # Make kubeconfig save fail
     mocks["kind"].get_kubeconfig.side_effect = Exception("kubeconfig error")
@@ -173,5 +222,5 @@ def test_create_cluster_addon_without_kubeconfig(
         # Cluster should succeed
         assert result.get("cluster_name") == "test"
 
-        # But addons should not be installed (no kubeconfig)
+        # But addons should not be installed (no kubeconfig for Phase 2)
         assert "addons_installed" not in result

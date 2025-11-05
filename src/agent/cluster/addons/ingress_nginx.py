@@ -12,7 +12,11 @@ class IngressNginxAddon(BaseAddon):
     """NGINX Ingress Controller addon.
 
     Installs the NGINX Ingress Controller using Helm.
-    Configured for Kind clusters with NodePort service type.
+    Configured for Kind clusters with NodePort service type and hostPort access.
+
+    Cluster Requirements (applied before cluster creation):
+    - Port mappings: 80 (HTTP) and 443 (HTTPS)
+    - Node label: ingress-ready=true (for Kind compatibility)
     """
 
     DEFAULT_CHART_VERSION = "4.13.2"
@@ -39,6 +43,24 @@ class IngressNginxAddon(BaseAddon):
         self.namespace = self.config.get("namespace", self.DEFAULT_NAMESPACE)
         self.custom_values = self.config.get("values", {})
         self.addon_name = "ingress-nginx"
+
+    def get_port_requirements(self) -> list[dict[str, Any]]:
+        """NGINX Ingress needs ports 80 and 443 mapped to host.
+
+        These ports allow direct access to the ingress controller from the host machine.
+        The cluster template must include these port mappings before cluster creation.
+        """
+        return [
+            {"containerPort": 80, "hostPort": 80, "protocol": "TCP"},
+            {"containerPort": 443, "hostPort": 443, "protocol": "TCP"},
+        ]
+
+    def get_node_labels(self) -> dict[str, str]:
+        """NGINX Ingress requires the ingress-ready label for Kind compatibility.
+
+        Kind uses this label to identify which nodes can run ingress controllers.
+        """
+        return {"ingress-ready": "true"}
 
     def check_prerequisites(self) -> bool:
         """Check if prerequisites are met.
@@ -138,6 +160,8 @@ class IngressNginxAddon(BaseAddon):
             self._add_helm_repo(self.HELM_REPO_NAME, self.HELM_REPO_URL)
 
             # Prepare Helm values for Kind cluster
+            # Note: Port mappings and node labels are handled in cluster config (pre-creation)
+            # Here we configure the controller to use those ports via hostPort
             values = {
                 "controller.service.type": "NodePort",
                 "controller.hostPort.enabled": "true",
@@ -147,7 +171,7 @@ class IngressNginxAddon(BaseAddon):
                 "controller.updateStrategy.rollingUpdate.maxUnavailable": "1",
             }
 
-            # Merge with custom values
+            # Merge with custom values (user can override defaults)
             values.update(self.custom_values)
 
             # Install via Helm
