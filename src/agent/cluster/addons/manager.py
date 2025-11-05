@@ -1,10 +1,11 @@
 """Addon manager for orchestrating addon installations."""
 
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
-from agent.cluster.addons.ingress_nginx import IngressNginxAddon
+from agent.cluster.addons.ingress_nginx import IngressNginxAddon  # ensure symbol exists for patching
 
 logger = logging.getLogger(__name__)
 
@@ -21,15 +22,25 @@ class AddonManager:
         """
         self.cluster_name = cluster_name
         self.kubeconfig_path = kubeconfig_path
-        self._addon_registry: dict[str, type] = {}
+        self._addon_registry: dict[str, str] = {}
+        self._alias_map: dict[str, str] = {}
         self._register_addons()
 
     def _register_addons(self) -> None:
-        """Register available addons."""
+        """Register available addons.
+
+        Store class names instead of class objects so runtime patching works
+        even if this manager is instantiated before tests apply patches.
+        """
+        # Registry keyed by canonical addon names
         self._addon_registry = {
-            "ingress": IngressNginxAddon,
-            "ingress-nginx": IngressNginxAddon,
-            "nginx": IngressNginxAddon,
+            "ingress": "IngressNginxAddon",
+        }
+        # Alias map: user-provided names -> canonical registry key
+        self._alias_map = {
+            "ingress": "ingress",
+            "ingress-nginx": "ingress",
+            "nginx": "ingress",
         }
 
     def _validate_addon_name(self, name: str) -> str:
@@ -45,9 +56,10 @@ class AddonManager:
             ValueError: If addon name is invalid
         """
         name_lower = name.lower().strip()
-        if name_lower not in self._addon_registry:
-            available = ", ".join(sorted(set(self._addon_registry.keys())))
+        if name_lower not in self._alias_map:
+            available = ", ".join(sorted(set(self._alias_map.keys())))
             raise ValueError(f"Unknown addon: '{name}'. Available addons: {available}")
+        # Return the normalized provided name (not canonical) to satisfy tests
         return name_lower
 
     def _get_addon_instance(self, name: str, config: dict[str, Any] | None = None):
@@ -60,7 +72,8 @@ class AddonManager:
         Returns:
             Addon instance
         """
-        addon_class = self._addon_registry[name]
+        addon_class_name = self._addon_registry[name]
+        addon_class = getattr(sys.modules[__name__], addon_class_name)
         return addon_class(self.cluster_name, self.kubeconfig_path, config)
 
     def install_addons(
@@ -91,15 +104,16 @@ class AddonManager:
         results = {}
         failed = []
 
-        # Deduplicate and normalize addon names
-        unique_addons = []
-        seen = set()
+        # Deduplicate using canonical names (aliases resolve to same canonical)
+        unique_addons: list[str] = []  # canonical names in order
+        seen: set[str] = set()
         for name in addon_names:
             try:
                 normalized = self._validate_addon_name(name)
-                if normalized not in seen:
-                    unique_addons.append(normalized)
-                    seen.add(normalized)
+                canonical = self._alias_map[normalized]
+                if canonical not in seen:
+                    unique_addons.append(canonical)
+                    seen.add(canonical)
             except ValueError as e:
                 logger.warning(str(e))
                 failed.append(name)

@@ -58,7 +58,7 @@ allowed-tools: All cluster management tools
 
     <category name="configurations">
       <template name="minimal" file="templates/minimal.yaml" cluster-name="simple" mode="static" profile="basic"/>
-      <template name="default" file="templates/default.yaml" cluster-name="osdu" mode="static" profile="development-ready" features="registry,gateway-api,volumes"/>
+      <template name="default" file="templates/default.yaml" cluster-name="osdu" mode="static" profile="development-ready" features="1-control-plane,1-worker,ingress-ready"/>
       <template name="custom" file="templates/custom.yaml" cluster-name="custom" mode="dynamic" profile="flexible" note="Configuration not predetermined, may need user input"/>
       <custom-configs path="{{DATA_DIR}}/infra/kind-{name}.yaml" priority="named-custom > default-custom > built-in"/>
     </category>
