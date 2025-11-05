@@ -62,7 +62,7 @@ class AddonManager:
         # Return the normalized provided name (not canonical) to satisfy tests
         return name_lower
 
-    def _get_addon_instance(self, name: str, config: dict[str, Any] | None = None):
+    def get_addon_instance(self, name: str, config: dict[str, Any] | None = None):
         """Get an addon instance.
 
         Args:
@@ -134,7 +134,7 @@ class AddonManager:
             try:
                 logger.info(f"Processing addon: {addon_name}")
                 addon_config = configs.get(addon_name)
-                addon = self._get_addon_instance(addon_name, addon_config)
+                addon = self.get_addon_instance(addon_name, addon_config)
                 result = addon.run()
                 results[addon_name] = result
 

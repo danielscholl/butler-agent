@@ -38,7 +38,7 @@ def test_validate_addon_name_invalid(manager):
 
 def test_get_addon_instance(manager):
     """Test getting addon instance."""
-    addon = manager._get_addon_instance("ingress")
+    addon = manager.get_addon_instance("ingress")
 
     assert addon is not None
     assert addon.cluster_name == "test-cluster"

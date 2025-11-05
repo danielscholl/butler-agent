@@ -111,7 +111,7 @@ class BaseAddon(ABC):
         release_name: str,
         chart: str,
         namespace: str,
-        values: dict[str, str] | None = None,
+        values: dict[str, Any] | None = None,
         version: str | None = None,
     ) -> None:
         """Install a Helm chart.

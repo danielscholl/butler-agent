@@ -131,7 +131,7 @@ def create_cluster(
 
                     # Get temporary addon instance for config collection
                     # Note: kubeconfig path is ignored for pre-creation methods
-                    temp_addon = temp_manager._get_addon_instance(canonical_name, None)
+                    temp_addon = temp_manager.get_addon_instance(canonical_name, None)
 
                     # Collect all requirements from this addon
                     addon_req = {}
@@ -168,7 +168,7 @@ def create_cluster(
                 )
 
         # Convert cluster config dict back to YAML string for kind_manager
-        # Use safe_dump for security and sort_keys=False for stable output
+        # Use safe_dump for security; sort_keys=False preserves the original key order from the merged config dict (insertion order in Python 3.7+), making diffs more readable
         cluster_config_yaml = yaml.safe_dump(
             cluster_config, default_flow_style=False, sort_keys=False
         )

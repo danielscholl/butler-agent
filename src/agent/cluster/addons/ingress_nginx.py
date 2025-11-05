@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from agent.cluster.addons.base import BaseAddon
@@ -27,7 +28,7 @@ class IngressNginxAddon(BaseAddon):
     RELEASE_NAME = "ingress-nginx"
     DEPLOYMENT_NAME = "ingress-nginx-controller"
 
-    def __init__(self, cluster_name: str, kubeconfig_path, config: dict[str, Any] | None = None):
+    def __init__(self, cluster_name: str, kubeconfig_path: Path, config: dict[str, Any] | None = None):
         """Initialize NGINX Ingress addon.
 
         Args:
@@ -119,8 +120,9 @@ class IngressNginxAddon(BaseAddon):
             if result.returncode == 0 and self.RELEASE_NAME in result.stdout:
                 self.log_info("Detected via Helm release")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            # Helm check failed, fallback to kubectl
+            self.log_info(f"Helm check failed, trying kubectl fallback: {e}")
 
         # Fallback: Check via kubectl deployment
         try:
@@ -144,8 +146,9 @@ class IngressNginxAddon(BaseAddon):
             if result.returncode == 0:
                 self.log_info("Detected via kubectl deployment")
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            # kubectl check failed
+            self.log_info(f"kubectl check failed: {e}")
 
         return False
 

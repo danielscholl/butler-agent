@@ -69,6 +69,7 @@ def test_check_prerequisites_helm_not_found(mock_run, ingress_addon):
             return MagicMock(returncode=0)
         elif args[0][0] == "helm":
             raise FileNotFoundError()
+        return None
 
     mock_run.side_effect = run_side_effect
 

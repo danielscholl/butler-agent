@@ -85,7 +85,7 @@ def test_create_cluster_with_addons(
     mock_addon_instance.get_cluster_config_requirements.return_value = {}
     mock_addon_instance.get_port_requirements.return_value = []
     mock_addon_instance.get_node_labels.return_value = {}
-    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+    mock_addon_manager.get_addon_instance.return_value = mock_addon_instance
 
     # Phase 2: Installation
     mock_addon_manager.install_addons.return_value = {
@@ -132,7 +132,7 @@ def test_create_cluster_addon_failure(
     mock_addon_instance.get_cluster_config_requirements.return_value = {}
     mock_addon_instance.get_port_requirements.return_value = []
     mock_addon_instance.get_node_labels.return_value = {}
-    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+    mock_addon_manager.get_addon_instance.return_value = mock_addon_instance
 
     # Phase 2: Installation with failure
     mock_addon_manager.install_addons.return_value = {
@@ -180,7 +180,7 @@ def test_create_cluster_multiple_addons(
     mock_addon_instance.get_cluster_config_requirements.return_value = {}
     mock_addon_instance.get_port_requirements.return_value = []
     mock_addon_instance.get_node_labels.return_value = {}
-    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+    mock_addon_manager.get_addon_instance.return_value = mock_addon_instance
 
     # Phase 2: Installation with multiple addons
     mock_addon_manager.install_addons.return_value = {
@@ -222,7 +222,7 @@ def test_create_cluster_addon_without_kubeconfig(
     mock_addon_instance.get_cluster_config_requirements.return_value = {}
     mock_addon_instance.get_port_requirements.return_value = []
     mock_addon_instance.get_node_labels.return_value = {}
-    mock_addon_manager._get_addon_instance.return_value = mock_addon_instance
+    mock_addon_manager.get_addon_instance.return_value = mock_addon_instance
     mock_addon_manager_class.return_value = mock_addon_manager
 
     # Make kubeconfig save fail
