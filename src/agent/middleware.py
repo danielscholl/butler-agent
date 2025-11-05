@@ -130,8 +130,16 @@ async def logging_function_middleware(
     # Emit tool start event (if visualization enabled)
     tool_event_id = None
     if should_show_visualization():
-        # Convert args to dict for event
-        args_dict = args.dict() if hasattr(args, "dict") else (args if isinstance(args, dict) else {})
+        # Convert args to dict for event (using Pydantic v2 model_dump)
+        if hasattr(args, "model_dump"):
+            args_dict = args.model_dump()
+        elif hasattr(args, "dict"):
+            # Fallback for Pydantic v1 compatibility
+            args_dict = args.dict()
+        elif isinstance(args, dict):
+            args_dict = args
+        else:
+            args_dict = {}
         # Sanitize (remove sensitive keys)
         safe_args = {k: v for k, v in args_dict.items() if k not in ["token", "api_key", "password"]}
 

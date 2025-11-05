@@ -471,7 +471,7 @@ class ExecutionTreeDisplay:
 
         # Process any remaining events before stopping
         while True:
-            event = await self._event_emitter.get_event_nowait()
+            event = self._event_emitter.get_event_nowait()
             if event is None:
                 break
             await self._handle_event(event)

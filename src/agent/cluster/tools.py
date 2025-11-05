@@ -45,7 +45,7 @@ def initialize_tools(config: AgentConfig) -> None:
     global _kind_manager, _kubectl_manager, _cluster_status, _config
     _config = config
     _kind_manager = KindManager()
-    _kubectl_manager = KubectlManager()
+    _kubectl_manager = KubectlManager(config)
     _cluster_status = ClusterStatus()
 
 

@@ -784,8 +784,6 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
             sys.exit(1)
 
         # Execute query (single-turn, no thread persistence needed)
-        import time
-
         from agent.display import (
             DisplayMode,
             ExecutionContext,
@@ -793,7 +791,6 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
             set_execution_context,
         )
 
-        start_time = time.time()
         thread = agent.get_new_thread()
 
         # Set execution context for visualization
@@ -814,7 +811,7 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
             try:
                 response = await agent.run(prompt, thread=thread)
 
-                # Stop display (shows completion summary)
+                # Stop display (shows completion summary with timing)
                 await execution_display.stop()
 
             except KeyboardInterrupt:
@@ -825,8 +822,6 @@ async def run_single_query(prompt: str, quiet: bool = False, verbose: bool = Fal
         else:
             # Quiet mode - no visualization
             response = await agent.run(prompt, thread=thread)
-
-        elapsed = time.time() - start_time
 
         # Display response
         if response:

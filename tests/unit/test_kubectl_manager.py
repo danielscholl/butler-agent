@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, mock_open, patch
 import pytest
 
 from agent.cluster.kubectl_manager import KubectlManager
+from agent.config import AgentConfig
 from agent.utils.async_subprocess import AsyncCompletedProcess
 from agent.utils.errors import (
     ClusterNotFoundError,
@@ -22,12 +23,13 @@ class TestKubectlManager:
     """Tests for KubectlManager class."""
 
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    def test_init_success(self, mock_run):
+    def test_init_success(self, mock_run, mock_config):
         """Test successful initialization."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
 
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
         assert manager is not None
+        assert manager.config == mock_config
 
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
@@ -36,43 +38,44 @@ class TestKubectlManager:
         assert args[2] == "--client"
 
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    def test_init_kubectl_not_found(self, mock_run):
+    def test_init_kubectl_not_found(self, mock_run, mock_config):
         """Test initialization when kubectl is not installed."""
         mock_run.side_effect = FileNotFoundError()
 
         with pytest.raises(KubectlCommandError) as exc_info:
-            KubectlManager()
+            KubectlManager(mock_config)
 
         assert "kubectl CLI not found" in str(exc_info.value)
         assert "install kubectl" in str(exc_info.value)
 
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    def test_init_kubectl_timeout(self, mock_run):
+    def test_init_kubectl_timeout(self, mock_run, mock_config):
         """Test initialization timeout."""
         mock_run.side_effect = subprocess.TimeoutExpired("kubectl", 10)
 
         with pytest.raises(KubectlCommandError) as exc_info:
-            KubectlManager()
+            KubectlManager(mock_config)
 
         assert "timed out" in str(exc_info.value)
 
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    def test_get_kubeconfig_path(self, mock_run):
-        """Test kubeconfig path resolution."""
+    def test_get_kubeconfig_path(self, mock_run, mock_config):
+        """Test kubeconfig path resolution uses config method."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         path = manager._get_kubeconfig_path("test-cluster")
-        assert path == Path("./data/test-cluster/kubeconfig")
+        expected_path = mock_config.get_kubeconfig_path("test-cluster")
+        assert path == expected_path
 
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_validate_kubeconfig_success(self, mock_run, mock_run_async):
+    async def test_validate_kubeconfig_success(self, mock_run, mock_run_async, mock_config):
         """Test successful kubeconfig validation."""
         # First call for __init__
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Second call for cluster-info validation
         mock_run_async.return_value = AsyncCompletedProcess(
@@ -84,14 +87,14 @@ class TestKubectlManager:
 
         with patch.object(Path, "exists", return_value=True):
             path = await manager._validate_kubeconfig("test-cluster")
-            assert path == Path("./data/test-cluster/kubeconfig")
+            assert path == mock_config.get_kubeconfig_path("test-cluster")
 
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_validate_kubeconfig_not_found(self, mock_run):
+    async def test_validate_kubeconfig_not_found(self, mock_run, mock_config):
         """Test kubeconfig file not found."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         with patch.object(Path, "exists", return_value=False):
             with pytest.raises(KubeconfigNotFoundError) as exc_info:
@@ -103,11 +106,11 @@ class TestKubectlManager:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_validate_kubeconfig_cluster_not_accessible(self, mock_run, mock_run_async):
+    async def test_validate_kubeconfig_cluster_not_accessible(self, mock_run, mock_run_async, mock_config):
         """Test cluster not accessible."""
         # First call for __init__
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Second call for cluster-info returns error
         mock_run_async.return_value = AsyncCompletedProcess(
@@ -127,11 +130,11 @@ class TestKubectlManager:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_get_resources_success(self, mock_run, mock_run_async):
+    async def test_get_resources_success(self, mock_run, mock_run_async, mock_config):
         """Test successful resource retrieval."""
         # Mock __init__
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Mock validation and get resources
         resources_data = {
@@ -170,10 +173,10 @@ class TestKubectlManager:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_get_resources_with_label_selector(self, mock_run, mock_run_async):
+    async def test_get_resources_with_label_selector(self, mock_run, mock_run_async, mock_config):
         """Test resource retrieval with label selector."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         resources_data = {"items": [{"metadata": {"name": "nginx-pod"}}]}
 
@@ -203,10 +206,10 @@ class TestKubectlManager:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_get_resources_empty(self, mock_run, mock_run_async):
+    async def test_get_resources_empty(self, mock_run, mock_run_async, mock_config):
         """Test resource retrieval with no results."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         resources_data = {"items": []}
 
@@ -236,10 +239,10 @@ class TestKubectlManager:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_get_resources_command_fails(self, mock_run, mock_run_async):
+    async def test_get_resources_command_fails(self, mock_run, mock_run_async, mock_config):
         """Test resource retrieval command failure."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Mock for validation (cluster-info) and get resources
         mock_run_async.side_effect = [
@@ -268,10 +271,10 @@ class TestKubectlManager:
     @patch("agent.cluster.kubectl_manager.subprocess.run")
     @patch("builtins.open", new_callable=mock_open)
     @patch("agent.cluster.kubectl_manager.tempfile.NamedTemporaryFile")
-    async def test_apply_manifest_success(self, mock_tempfile, mock_file, mock_run, mock_run_async):
+    async def test_apply_manifest_success(self, mock_tempfile, mock_file, mock_run, mock_run_async, mock_config):
         """Test successful manifest application."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Mock temp file
         temp_mock = MagicMock()
@@ -315,10 +318,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_apply_manifest_invalid_yaml(self, mock_run, mock_run_async):
+    async def test_apply_manifest_invalid_yaml(self, mock_run, mock_run_async, mock_config):
         """Test manifest application with invalid YAML."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         mock_run_async.return_value = AsyncCompletedProcess(
             args=["kubectl", "cluster-info"],
@@ -338,10 +341,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_delete_resource_success(self, mock_run, mock_run_async):
+    async def test_delete_resource_success(self, mock_run, mock_run_async, mock_config):
         """Test successful resource deletion."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         mock_run_async.side_effect = [
             # cluster-info validation
@@ -370,10 +373,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_delete_resource_not_found(self, mock_run, mock_run_async):
+    async def test_delete_resource_not_found(self, mock_run, mock_run_async, mock_config):
         """Test delete resource that doesn't exist."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Mock for validation (cluster-info) and delete
         mock_run_async.side_effect = [
@@ -401,10 +404,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_delete_resource_with_force(self, mock_run, mock_run_async):
+    async def test_delete_resource_with_force(self, mock_run, mock_run_async, mock_config):
         """Test forced resource deletion."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         mock_run_async.side_effect = [
             # cluster-info validation
@@ -431,10 +434,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_get_logs_success(self, mock_run, mock_run_async):
+    async def test_get_logs_success(self, mock_run, mock_run_async, mock_config):
         """Test successful log retrieval."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         mock_logs = "log line 1\nlog line 2\nlog line 3"
 
@@ -466,10 +469,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_get_logs_pod_not_found(self, mock_run, mock_run_async):
+    async def test_get_logs_pod_not_found(self, mock_run, mock_run_async, mock_config):
         """Test log retrieval for non-existent pod."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Mock for validation (cluster-info) and get logs
         mock_run_async.side_effect = [
@@ -497,10 +500,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_get_logs_with_container(self, mock_run, mock_run_async):
+    async def test_get_logs_with_container(self, mock_run, mock_run_async, mock_config):
         """Test log retrieval with specific container."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         mock_logs = "container logs"
 
@@ -529,10 +532,10 @@ metadata:
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_describe_resource_success(self, mock_run, mock_run_async):
+    async def test_describe_resource_success(self, mock_run, mock_run_async, mock_config):
         """Test successful resource description."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         mock_description = """
 Name:         nginx
@@ -569,10 +572,10 @@ Events:       <none>
     @pytest.mark.asyncio
     @patch("agent.cluster.kubectl_manager.run_async")
     @patch("agent.cluster.kubectl_manager.subprocess.run")
-    async def test_describe_resource_not_found(self, mock_run, mock_run_async):
+    async def test_describe_resource_not_found(self, mock_run, mock_run_async, mock_config):
         """Test describe resource that doesn't exist."""
         mock_run.return_value = Mock(returncode=0, stdout="kubectl version")
-        manager = KubectlManager()
+        manager = KubectlManager(mock_config)
 
         # Mock for validation (cluster-info) and describe
         mock_run_async.side_effect = [

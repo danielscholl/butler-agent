@@ -24,8 +24,15 @@ logger = logging.getLogger(__name__)
 class KubectlManager:
     """Manager for kubectl operations on Kubernetes clusters."""
 
-    def __init__(self):
-        """Initialize kubectl manager."""
+    def __init__(self, config: "AgentConfig"):
+        """Initialize kubectl manager.
+
+        Args:
+            config: Agent configuration for path resolution
+        """
+        from agent.config import AgentConfig
+
+        self.config = config
         self._check_kubectl_available()
 
     def _check_kubectl_available(self) -> None:
@@ -53,7 +60,7 @@ class KubectlManager:
             raise KubectlCommandError("kubectl version check timed out") from e
 
     def _get_kubeconfig_path(self, cluster_name: str) -> Path:
-        """Get kubeconfig path for a cluster.
+        """Get kubeconfig path for a cluster using centralized config resolution.
 
         Args:
             cluster_name: Cluster name
@@ -61,7 +68,7 @@ class KubectlManager:
         Returns:
             Path to kubeconfig file
         """
-        return Path(f"./data/{cluster_name}/kubeconfig")
+        return self.config.get_kubeconfig_path(cluster_name)
 
     async def _validate_kubeconfig(self, cluster_name: str) -> Path:
         """Validate kubeconfig exists and cluster is accessible asynchronously.

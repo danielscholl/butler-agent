@@ -2,6 +2,18 @@
 
 This module provides utilities to detect port conflicts before cluster creation,
 preventing wasted time on failed operations.
+
+Platform Requirements:
+    - Requires `lsof` command for port checking (standard on macOS/Linux)
+    - Requires `docker` CLI for container identification
+    - Falls back gracefully when tools are unavailable (assumes ports are free)
+
+Fallback Behavior:
+    On platforms without lsof or docker, or when commands timeout, the checker
+    returns "available=True" as a best-effort approach. This means port conflicts
+    may not be detected on systems without these tools, but cluster creation will
+    still proceed normally. The actual port conflict will be caught by Docker/Kind
+    during cluster creation if it occurs.
 """
 
 import logging
@@ -14,14 +26,22 @@ logger = logging.getLogger(__name__)
 def check_port_conflict(port: int) -> dict[str, Any] | None:
     """Check if a port is in use by a Docker container (likely Kind cluster).
 
+    Uses lsof to check if port is listening, then docker CLI to identify the
+    container. Falls back gracefully if tools are unavailable.
+
     Args:
         port: Port number to check (e.g., 80, 443)
 
     Returns:
-        Dict with conflict info if port is in use, None if free:
+        Dict with conflict info if port is in use, None if free or check fails:
         - port: int - The conflicting port
         - cluster_name: str - Name of Kind cluster using the port (if identifiable)
         - container: str - Docker container name
+
+    Note:
+        Returns None (port appears free) when lsof/docker are unavailable or on
+        timeout/error. This best-effort approach prevents blocking cluster creation
+        on systems without these tools.
 
     Example:
         conflict = check_port_conflict(80)

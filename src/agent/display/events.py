@@ -111,11 +111,15 @@ class AddonProgressEvent(ExecutionEvent):
 
 
 class EventEmitter:
-    """Thread-safe event emitter using asyncio queue.
+    """Task-safe event emitter using asyncio queue.
 
-    This emitter provides a thread-safe way to emit execution events
+    This emitter provides a task-safe way to emit execution events
     that can be consumed by the execution tree display. Uses asyncio.Queue
-    to work across async task boundaries.
+    to work across async task boundaries within the same event loop.
+
+    Note:
+        asyncio.Queue is not thread-safe. If emissions need to happen from
+        different threads, use loop.call_soon_threadsafe() as a bridge.
     """
 
     def __init__(self) -> None:
@@ -133,17 +137,15 @@ class EventEmitter:
             event: Event to emit
 
         Note:
-            This is safe to call from async contexts. The queue is thread-safe.
+            This is safe to call from async contexts within the same event loop.
+            For cross-thread emission, use loop.call_soon_threadsafe().
         """
         if not self._enabled:
             return
 
-        try:
-            # Use put_nowait since we don't want to block
-            self._queue.put_nowait(event)
-        except asyncio.QueueFull:
-            # If queue is full, drop the event (prevents memory issues)
-            pass
+        # Use put_nowait since we don't want to block
+        # Queue has no maxsize, so this should never raise QueueFull
+        self._queue.put_nowait(event)
 
     async def get_event(self) -> ExecutionEvent:
         """Get next event from queue.
@@ -156,7 +158,7 @@ class EventEmitter:
         """
         return await self._queue.get()
 
-    async def get_event_nowait(self) -> Optional[ExecutionEvent]:
+    def get_event_nowait(self) -> Optional[ExecutionEvent]:
         """Get next event without blocking.
 
         Returns:
