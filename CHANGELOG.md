@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.5...butler-agent-v0.1.6) (2025-11-05)
+
+
+### Features
+
+* implement two-phase addon architecture with config merge ([#21](https://github.com/danielscholl/butler-agent/issues/21)) ([0a0f1f1](https://github.com/danielscholl/butler-agent/commit/0a0f1f17782ec6b1454ade1b2c3549c447b7a9da))
+
 ## [0.1.5](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.4...butler-agent-v0.1.5) (2025-11-03)
 
 
