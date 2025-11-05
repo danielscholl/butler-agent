@@ -10,7 +10,9 @@ from agent.display.events import (
     ToolCompleteEvent,
     ToolErrorEvent,
     ToolStartEvent,
+    get_current_tool_event_id,
     get_event_emitter,
+    set_current_tool_event_id,
 )
 
 # Execution context
@@ -36,6 +38,8 @@ __all__ = [
     "AddonProgressEvent",
     "EventEmitter",
     "get_event_emitter",
+    "get_current_tool_event_id",
+    "set_current_tool_event_id",
     # Context
     "ExecutionContext",
     "set_execution_context",

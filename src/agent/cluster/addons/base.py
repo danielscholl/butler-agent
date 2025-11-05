@@ -288,13 +288,22 @@ class BaseAddon(ABC):
         """
         import time
 
-        from agent.display import AddonProgressEvent, get_event_emitter, should_show_visualization
+        from agent.display import (
+            AddonProgressEvent,
+            get_current_tool_event_id,
+            get_event_emitter,
+            should_show_visualization,
+        )
 
         self.log_info(f"Starting installation for cluster '{self.cluster_name}'")
         start_time = time.time()
 
-        # Get parent tool event ID from context (if available)
-        parent_id = getattr(self, "_parent_event_id", None)
+        # Get parent tool event ID from context (automatically set by middleware)
+        parent_id = get_current_tool_event_id()
+        if parent_id:
+            logger.debug(f"Addon {self.addon_name} nesting under parent tool (id: {parent_id[:8]}...)")
+        else:
+            logger.debug(f"Addon {self.addon_name} running without parent context")
 
         # Check prerequisites
         if not await self.check_prerequisites():

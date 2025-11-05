@@ -6,6 +6,7 @@ asyncio queue for consumption by the execution tree display.
 """
 
 import asyncio
+import contextvars
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -228,3 +229,34 @@ def get_event_emitter() -> EventEmitter:
     if _event_emitter is None:
         _event_emitter = EventEmitter()
     return _event_emitter
+
+
+# ============================================================================
+# Tool Event Context for Parent ID Propagation
+# ============================================================================
+
+# ContextVar for propagating current tool event ID to child operations
+_current_tool_event_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "current_tool_event_id", default=None
+)
+
+
+def set_current_tool_event_id(event_id: Optional[str]) -> None:
+    """Set the current tool event ID for child event nesting.
+
+    This allows child operations (like addon installations) to automatically
+    nest their events under the parent tool event in the execution tree.
+
+    Args:
+        event_id: Tool event ID to set as parent, or None to clear
+    """
+    _current_tool_event_id.set(event_id)
+
+
+def get_current_tool_event_id() -> Optional[str]:
+    """Get the current tool event ID for child event nesting.
+
+    Returns:
+        Current tool event ID, or None if not in a tool context
+    """
+    return _current_tool_event_id.get()

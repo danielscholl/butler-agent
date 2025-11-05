@@ -118,6 +118,7 @@ async def logging_function_middleware(
         ToolErrorEvent,
         ToolStartEvent,
         get_event_emitter,
+        set_current_tool_event_id,
         should_show_visualization,
     )
 
@@ -137,6 +138,10 @@ async def logging_function_middleware(
         event = ToolStartEvent(tool_name=tool_name, arguments=safe_args)
         tool_event_id = event.event_id
         get_event_emitter().emit(event)
+
+        # Set tool context for child operations (enables nested event display)
+        set_current_tool_event_id(tool_event_id)
+        logger.debug(f"Set tool context: {tool_name} (event_id: {tool_event_id[:8]}...)")
 
     start_time = time.time()
 
@@ -173,6 +178,11 @@ async def logging_function_middleware(
             get_event_emitter().emit(error_event)
 
         raise
+    finally:
+        # Clear tool context when exiting tool
+        if should_show_visualization():
+            set_current_tool_event_id(None)
+            logger.debug(f"Cleared tool context: {tool_name}")
 
 
 def _extract_tool_summary(tool_name: str, result: Any) -> str:
