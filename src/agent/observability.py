@@ -32,6 +32,19 @@ def initialize_observability(connection_string: str | None = None) -> bool:
         # Try to import Azure Monitor OpenTelemetry
         from azure.monitor.opentelemetry import configure_azure_monitor
 
+        # Suppress verbose Azure SDK logging to avoid cluttering console
+        # Set Azure SDK loggers to WARNING level to only show important messages
+        azure_loggers = [
+            "azure",
+            "azure.core",
+            "azure.core.pipeline",
+            "azure.core.pipeline.policies.http_logging_policy",
+            "azure.monitor",
+            "uamqp",
+        ]
+        for logger_name in azure_loggers:
+            logging.getLogger(logger_name).setLevel(logging.WARNING)
+
         # Configure Azure Monitor
         configure_azure_monitor(connection_string=connection_string)
 
