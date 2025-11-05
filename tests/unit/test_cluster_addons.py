@@ -70,7 +70,10 @@ def test_create_cluster_with_addons(
 ):
     """Test cluster creation with add-ons (two-phase pattern)."""
     _ = setup_tools  # noqa: F841
-    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
+    mock_get_config.return_value = (
+        "nodes:\n- role: control-plane\n",
+        "built-in default",
+    )
 
     # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
@@ -114,7 +117,10 @@ def test_create_cluster_addon_failure(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation when addon fails (cluster should still succeed)."""
-    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
+    mock_get_config.return_value = (
+        "nodes:\n- role: control-plane\n",
+        "built-in default",
+    )
 
     # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
@@ -156,7 +162,10 @@ def test_create_cluster_multiple_addons(
     mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
 ):
     """Test cluster creation with multiple add-ons."""
-    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
+    mock_get_config.return_value = (
+        "nodes:\n- role: control-plane\n",
+        "built-in default",
+    )
 
     # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
@@ -200,7 +209,10 @@ def test_create_cluster_addon_without_kubeconfig(
 ):
     """Test that addons are skipped if kubeconfig is not saved."""
     mocks = setup_tools
-    mock_get_config.return_value = ({"nodes": [{"role": "control-plane"}]}, "built-in default")
+    mock_get_config.return_value = (
+        "nodes:\n- role: control-plane\n",
+        "built-in default",
+    )
 
     # Mock addon manager for Phase 1 (config collection still happens)
     mock_addon_manager = MagicMock()

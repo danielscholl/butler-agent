@@ -146,8 +146,16 @@ class BaseAddon(ABC):
     def get_cluster_config_requirements(self) -> dict[str, Any]:
         """Return cluster config patches needed before cluster creation.
 
-        This method is called BEFORE the cluster is created to gather any
-        configuration requirements that must be baked into the Kind cluster config.
+        **PRE-CREATION HOOK CONTRACT**:
+        This method is called BEFORE the cluster is created. It must:
+        - Return cluster configuration requirements ONLY (no side effects)
+        - NOT access kubeconfig or attempt cluster operations
+        - NOT access self.kubeconfig_path (it may not exist yet)
+        - Be deterministic and idempotent
+
+        This method is called during Phase 1 (pre-creation) of the two-phase addon
+        pattern. The returned requirements are merged into the cluster config before
+        the cluster is created.
 
         Override this for addons that need cluster-level configuration like:
         - containerd patches for container registries
@@ -171,6 +179,9 @@ class BaseAddon(ABC):
 
     def get_port_requirements(self) -> list[dict[str, Any]]:
         """Return port mappings needed for this addon.
+
+        **PRE-CREATION HOOK CONTRACT**: See get_cluster_config_requirements() for
+        contract details. This method must not access kubeconfig or cluster state.
 
         This method is called BEFORE the cluster is created to gather port mapping
         requirements. Port mappings are applied to the control-plane node's
@@ -197,6 +208,9 @@ class BaseAddon(ABC):
 
     def get_node_labels(self) -> dict[str, str]:
         """Return node labels needed for this addon.
+
+        **PRE-CREATION HOOK CONTRACT**: See get_cluster_config_requirements() for
+        contract details. This method must not access kubeconfig or cluster state.
 
         This method is called BEFORE the cluster is created to gather node label
         requirements. Labels are applied to control-plane nodes via kubeletExtraArgs.

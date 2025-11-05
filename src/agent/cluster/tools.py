@@ -7,6 +7,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from agent.cluster.addons import AddonManager
 from agent.cluster.config import get_cluster_config
 from agent.cluster.kind_manager import KindManager
@@ -101,9 +103,12 @@ def create_cluster(
 
     try:
         # Get cluster configuration with automatic discovery
-        cluster_config, config_source = get_cluster_config(
+        cluster_config_yaml, config_source = get_cluster_config(
             config, name, infra_dir=_config.get_infra_path()
         )
+
+        # Parse YAML string to dict for manipulation
+        cluster_config = yaml.safe_load(cluster_config_yaml)
 
         # Use configured default version if not specified
         k8s_version = kubernetes_version or _config.default_k8s_version
@@ -162,13 +167,19 @@ def create_cluster(
                     f"Merged configuration requirements from {len(addon_requirements)} addon(s)"
                 )
 
+        # Convert cluster config dict back to YAML string for kind_manager
+        # Use safe_dump for security and sort_keys=False for stable output
+        cluster_config_yaml = yaml.safe_dump(
+            cluster_config, default_flow_style=False, sort_keys=False
+        )
+
         logger.info(
             f"Creating cluster '{name}' with config '{config}' ({config_source}), "
             f"version {k8s_version}"
         )
 
         # Create cluster with merged configuration
-        result = _kind_manager.create_cluster(name, cluster_config, k8s_version)
+        result = _kind_manager.create_cluster(name, cluster_config_yaml, k8s_version)
 
         # Export and save kubeconfig if data directory is configured
         if _config:

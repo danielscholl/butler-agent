@@ -1,6 +1,5 @@
 """Tests for cluster config merge utilities."""
 
-import pytest
 
 from agent.cluster.config_merge import merge_addon_requirements
 
@@ -39,9 +38,7 @@ def test_merge_port_mappings_dedupe():
         "nodes": [
             {
                 "role": "control-plane",
-                "extraPortMappings": [
-                    {"containerPort": 80, "hostPort": 80, "protocol": "TCP"}
-                ],
+                "extraPortMappings": [{"containerPort": 80, "hostPort": 80, "protocol": "TCP"}],
             }
         ]
     }
@@ -58,7 +55,7 @@ def test_merge_port_mappings_dedupe():
 
 
 def test_merge_node_labels():
-    """Test merging node label requirements."""
+    """Test merging node label requirements from multiple addons."""
     base_config = {"nodes": [{"role": "control-plane"}]}
     addon_requirements = [
         {"node_labels": {"ingress-ready": "true"}},
@@ -70,9 +67,10 @@ def test_merge_node_labels():
     # Should have kubeadmConfigPatches with labels
     assert "kubeadmConfigPatches" in result["nodes"][0]
     patches = result["nodes"][0]["kubeadmConfigPatches"]
-    assert len(patches) > 0
+    # All labels from all addons are merged into a single patch
+    assert len(patches) == 1
 
-    # Check that patch contains labels
+    # Check that the patch contains all labels
     patch_text = patches[0]
     assert "ingress-ready=true" in patch_text
     assert "storage-class=local" in patch_text
@@ -127,9 +125,7 @@ def test_merge_preserves_base_config():
         "nodes": [
             {
                 "role": "control-plane",
-                "extraPortMappings": [
-                    {"containerPort": 6443, "hostPort": 6443, "protocol": "TCP"}
-                ],
+                "extraPortMappings": [{"containerPort": 6443, "hostPort": 6443, "protocol": "TCP"}],
             }
         ]
     }
@@ -188,3 +184,89 @@ def test_merge_feature_gates():
     assert "featureGates" in result
     assert result["featureGates"]["GatewayAPI"] is True
     assert result["featureGates"]["NetworkPolicy"] is True
+
+
+def test_merge_port_mappings_conflict_detection():
+    """Test that port mapping conflicts are detected and skipped."""
+    base_config = {
+        "nodes": [
+            {
+                "role": "control-plane",
+                "extraPortMappings": [{"containerPort": 8080, "hostPort": 80, "protocol": "TCP"}],
+            }
+        ]
+    }
+    addon_requirements = [
+        # This conflicts: same host port 80, different container port 8888
+        {"port_mappings": [{"containerPort": 8888, "hostPort": 80, "protocol": "TCP"}]},
+    ]
+
+    result = merge_addon_requirements(base_config, addon_requirements)
+
+    port_mappings = result["nodes"][0]["extraPortMappings"]
+    # Should still have only 1 mapping - the conflicting one was skipped
+    assert len(port_mappings) == 1
+    # Original mapping should be preserved
+    assert port_mappings[0]["containerPort"] == 8080
+    assert port_mappings[0]["hostPort"] == 80
+
+
+def test_merge_port_mappings_exact_duplicate():
+    """Test that exact duplicate port mappings are deduplicated."""
+    base_config = {
+        "nodes": [
+            {
+                "role": "control-plane",
+                "extraPortMappings": [{"containerPort": 80, "hostPort": 80, "protocol": "TCP"}],
+            }
+        ]
+    }
+    addon_requirements = [
+        # Exact duplicate
+        {"port_mappings": [{"containerPort": 80, "hostPort": 80, "protocol": "TCP"}]},
+        # Different protocol - should be added
+        {"port_mappings": [{"containerPort": 80, "hostPort": 80, "protocol": "UDP"}]},
+    ]
+
+    result = merge_addon_requirements(base_config, addon_requirements)
+
+    port_mappings = result["nodes"][0]["extraPortMappings"]
+    # Should have 2 mappings: original TCP and new UDP
+    assert len(port_mappings) == 2
+    tcp_mapping = next(p for p in port_mappings if p["protocol"] == "TCP")
+    udp_mapping = next(p for p in port_mappings if p["protocol"] == "UDP")
+    assert tcp_mapping["containerPort"] == 80
+    assert udp_mapping["containerPort"] == 80
+
+
+def test_merge_node_labels_with_existing_patches():
+    """Test that node labels are added even when existing patches exist."""
+    base_config = {
+        "nodes": [
+            {
+                "role": "control-plane",
+                "kubeadmConfigPatches": [
+                    """kind: InitConfiguration
+nodeRegistration:
+  kubeletExtraArgs:
+    node-labels: "existing=label"
+"""
+                ],
+            }
+        ]
+    }
+    addon_requirements = [
+        {"node_labels": {"new-label": "value"}},
+        {"node_labels": {"another-label": "value2"}},
+    ]
+
+    result = merge_addon_requirements(base_config, addon_requirements)
+
+    patches = result["nodes"][0]["kubeadmConfigPatches"]
+    # Should have original + 1 new patch with all new labels merged
+    assert len(patches) == 2
+
+    all_patches_text = "\n".join(patches)
+    assert "existing=label" in all_patches_text
+    assert "new-label=value" in all_patches_text
+    assert "another-label=value2" in all_patches_text

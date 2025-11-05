@@ -104,23 +104,54 @@ def merge_addon_requirements(
             if "extraPortMappings" not in control_plane_node:
                 control_plane_node["extraPortMappings"] = []
 
-            # Deduplicate by containerPort
-            existing_ports = {p["containerPort"] for p in control_plane_node["extraPortMappings"]}
+            # Deduplicate by (containerPort, hostPort, protocol) tuple
+            # Also detect conflicts where same (hostPort, protocol) is used for different container ports
+            existing_mappings = {
+                (p["containerPort"], p["hostPort"], p.get("protocol", "TCP"))
+                for p in control_plane_node["extraPortMappings"]
+            }
+            # Track (hostPort, protocol) -> containerPort for conflict detection
+            # Note: Same host port can be used for both TCP and UDP
+            existing_host_port_protocols = {
+                (p["hostPort"], p.get("protocol", "TCP")): p["containerPort"]
+                for p in control_plane_node["extraPortMappings"]
+            }
 
             added_count = 0
+            skipped_count = 0
             for mapping in all_port_mappings:
                 container_port = mapping["containerPort"]
-                if container_port in existing_ports:
+                host_port = mapping["hostPort"]
+                protocol = mapping.get("protocol", "TCP")
+                mapping_tuple = (container_port, host_port, protocol)
+                host_port_protocol = (host_port, protocol)
+
+                if mapping_tuple in existing_mappings:
+                    # Exact duplicate - skip silently
                     logger.debug(
-                        f"Skipping duplicate port mapping for container port {container_port}"
+                        f"Skipping duplicate port mapping: {container_port}:{host_port}/{protocol}"
                     )
+                    skipped_count += 1
+                elif host_port_protocol in existing_host_port_protocols:
+                    # Conflict: same (hostPort, protocol) for different container ports
+                    existing_container = existing_host_port_protocols[host_port_protocol]
+                    logger.warning(
+                        f"Port mapping conflict: host port {host_port}/{protocol} already mapped to "
+                        f"container port {existing_container}, cannot map to {container_port}. "
+                        f"Skipping conflicting mapping."
+                    )
+                    skipped_count += 1
                 else:
+                    # New mapping - add it
                     control_plane_node["extraPortMappings"].append(mapping)
-                    existing_ports.add(container_port)
+                    existing_mappings.add(mapping_tuple)
+                    existing_host_port_protocols[host_port_protocol] = container_port
                     added_count += 1
 
             if added_count > 0:
                 logger.info(f"Added {added_count} port mapping(s) to control-plane node")
+            if skipped_count > 0:
+                logger.debug(f"Skipped {skipped_count} duplicate/conflicting port mapping(s)")
 
     # Apply node labels to control-plane node
     if all_node_labels:
@@ -165,6 +196,8 @@ def _apply_node_labels(node: dict[str, Any], labels: dict[str, str]) -> None:
     """Apply node labels to a node's kubeadm configuration.
 
     Labels are added to kubeletExtraArgs.node-labels in the InitConfiguration patch.
+    Multiple InitConfiguration patches are merged by kubeadm, so we always append
+    a new patch to ensure labels from all addons are applied.
 
     Args:
         node: Node configuration dict
@@ -173,34 +206,15 @@ def _apply_node_labels(node: dict[str, Any], labels: dict[str, str]) -> None:
     if "kubeadmConfigPatches" not in node:
         node["kubeadmConfigPatches"] = []
 
-    # Find existing InitConfiguration patch
-    init_config_index = None
-    for i, patch in enumerate(node["kubeadmConfigPatches"]):
-        if "kind: InitConfiguration" in patch:
-            init_config_index = i
-            break
-
     # Format labels as comma-separated string
     label_str = ",".join(f"{k}={v}" for k, v in labels.items())
 
-    if init_config_index is not None:
-        # Merge with existing InitConfiguration
-        patch = node["kubeadmConfigPatches"][init_config_index]
-        if "node-labels:" in patch:
-            # Append to existing labels
-            # This is complex YAML manipulation, so we'll just append a new patch
-            pass
-        else:
-            # Add labels to existing patch
-            if "kubeletExtraArgs:" not in patch:
-                patch += "\n          kubeletExtraArgs:"
-            patch += f'\n            node-labels: "{label_str}"'
-            node["kubeadmConfigPatches"][init_config_index] = patch
-    else:
-        # Create new InitConfiguration patch
-        patch = f"""kind: InitConfiguration
+    # Always append a new InitConfiguration patch with the labels
+    # Kubeadm will merge multiple patches, so this ensures all addon labels are applied
+    patch = f"""kind: InitConfiguration
 nodeRegistration:
   kubeletExtraArgs:
     node-labels: "{label_str}"
 """
-        node["kubeadmConfigPatches"].append(patch)
+    node["kubeadmConfigPatches"].append(patch)
+    logger.debug(f"Appended InitConfiguration patch with labels: {label_str}")
