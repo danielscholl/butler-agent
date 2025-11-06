@@ -45,7 +45,6 @@ def _load_builtin_template(template_name: str) -> str:
 TEMPLATES: dict[str, str | Callable[[], str]] = {
     "minimal": lambda: _load_builtin_template("minimal"),
     "default": lambda: _load_builtin_template("default"),
-    "custom": lambda: _load_builtin_template("custom"),
 }
 
 
@@ -88,26 +87,20 @@ def _get_template(template_name: str) -> str:
 
 
 def discover_config_file(
-    config_name: str, cluster_name: str, infra_dir: Path, data_dir: Path | None = None
+    cluster_name: str, data_dir: Path | None = None
 ) -> tuple[Path | None, str]:
-    """Discover custom KinD configuration file with priority-based search.
+    """Discover cluster-specific KinD configuration file.
 
-    Priority order:
-    1. Cluster-specific config: .local/clusters/{cluster_name}/kind-config.yaml
-    2. Named custom configs: kind-{config_name}.yaml (when config_name not in built-in templates)
-    3. Default custom config: kind-config.yaml (when config_name is "default" or "custom")
-    4. Returns None if no custom config found (triggers built-in template fallback)
+    Only checks: .local/clusters/{cluster_name}/kind-config.yaml
 
     Args:
-        config_name: Configuration name to discover
         cluster_name: Name of the cluster being created
-        infra_dir: Path to infrastructure directory
-        data_dir: Path to data directory (optional, for cluster-specific configs)
+        data_dir: Path to data directory (for cluster-specific configs)
 
     Returns:
         Tuple of (filepath, source_description) or (None, reason) if not found
     """
-    # Priority 1: Cluster-specific config (pre-created by user)
+    # Only Priority: Cluster-specific config (pre-created by user)
     if data_dir:
         cluster_config = data_dir / "clusters" / cluster_name / "kind-config.yaml"
         if cluster_config.exists():
@@ -116,25 +109,8 @@ def discover_config_file(
                 f"Cluster-specific config: .local/clusters/{cluster_name}/kind-config.yaml",
             )
 
-    # Ensure infra directory exists for remaining checks
-    if not infra_dir.exists():
-        return None, f"Infrastructure directory does not exist: {infra_dir}"
-
-    # Priority 2: Named custom configs (when not using built-in template names)
-    if config_name not in TEMPLATES:
-        named_config = infra_dir / f"kind-{config_name}.yaml"
-        if named_config.exists():
-            return named_config, f"Named custom config: kind-{config_name}.yaml"
-        return None, f"Named config kind-{config_name}.yaml not found"
-
-    # Priority 3: Default custom config (for "default" or "custom" templates)
-    if config_name in ["default", "custom"]:
-        default_config = infra_dir / "kind-config.yaml"
-        if default_config.exists():
-            return default_config, "Default custom config: kind-config.yaml"
-
-    # No custom config found - will fall back to built-in templates
-    return None, f"No custom config found, using built-in template: {config_name}"
+    # No cluster-specific config found - will use built-in template
+    return None, "No cluster-specific config found, will use built-in template"
 
 
 def load_config_from_file(filepath: Path, cluster_name: str) -> str:
@@ -181,58 +157,45 @@ def load_config_from_file(filepath: Path, cluster_name: str) -> str:
 def get_cluster_config(
     template: str,
     name: str,
-    infra_dir: Path | None = None,
     data_dir: Path | None = None,
     **kwargs: Any,
 ) -> tuple[str, str]:
     """Generate cluster configuration with automatic discovery.
 
-    Configuration discovery (automatic):
+    Configuration discovery:
     1. Cluster-specific: .local/clusters/{name}/kind-config.yaml (if exists)
-    2. Named custom: .local/infra/kind-{template}.yaml (when template != minimal/default/custom)
-    3. Default custom: .local/infra/kind-config.yaml (when template = default/custom)
-    4. Built-in templates: Fallback for minimal/default/custom
+    2. Built-in templates: minimal, default
 
     Args:
-        template: Template name or custom config name
+        template: Template name ("minimal" or "default")
         name: Cluster name
-        infra_dir: Path to infrastructure directory (optional, for custom configs)
         data_dir: Path to data directory (optional, for cluster-specific configs)
         **kwargs: Additional template variables
 
     Returns:
         Tuple of (config_content, source_description) where source_description
-        indicates whether a custom file or built-in template was used
+        indicates whether a cluster-specific config or built-in template was used
 
     Raises:
-        ValueError: If template/config is invalid
-        FileNotFoundError: If a named custom config is requested but not found
+        ValueError: If template is invalid (not "minimal" or "default")
     """
     source_description = ""
 
-    # Try to discover custom configuration file if infra_dir is provided
-    if infra_dir:
-        config_path, description = discover_config_file(template, name, infra_dir, data_dir)
+    # Try to discover cluster-specific configuration file
+    if data_dir:
+        config_path, description = discover_config_file(name, data_dir)
         if config_path:
-            # Custom config found - load it
+            # Cluster-specific config found - load it
             try:
                 config_content = load_config_from_file(config_path, name)
                 return config_content, description
             except Exception as e:
                 # If loading fails, raise the error (don't fall back to templates)
-                raise ValueError(f"Failed to load custom config: {e}") from e
+                raise ValueError(f"Failed to load cluster-specific config: {e}") from e
         source_description = description
 
-    # No custom config found - use built-in templates
+    # No cluster-specific config found - use built-in templates
     if template not in TEMPLATES:
-        # If a named config was requested but not found, raise error
-        if infra_dir and infra_dir.exists():
-            raise FileNotFoundError(
-                f"Named configuration '{template}' not found. "
-                f"Expected file: {infra_dir / f'kind-{template}.yaml'}. "
-                f"Available templates: {', '.join(TEMPLATES.keys())}"
-            )
-        # No infra_dir provided, invalid template name
         raise ValueError(
             f"Invalid template: {template}. Must be one of: {', '.join(TEMPLATES.keys())}"
         )

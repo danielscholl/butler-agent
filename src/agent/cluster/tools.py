@@ -62,24 +62,21 @@ async def create_cluster(
     Optionally installs add-ons like NGINX Ingress Controller.
 
     Configuration discovery (automatic):
-    1. Named custom: ./data/infra/kind-{config}.yaml (when config != minimal/default/custom)
-    2. Default custom: ./data/infra/kind-config.yaml (when config = default/custom)
-    3. Built-in templates: Fallback for minimal/default/custom
+    1. Cluster-specific: .local/clusters/{name}/kind-config.yaml (if exists)
+    2. Built-in templates: minimal, default
 
     Examples:
-    - create_cluster("dev", "production") → looks for kind-production.yaml
-    - create_cluster("app", "default") → looks for kind-config.yaml, falls back to built-in
-    - create_cluster("test", "minimal") → uses built-in minimal template
-    - create_cluster("dev", "default", addons=["ingress"]) → cluster with NGINX Ingress
+    - create_cluster("dev", "minimal") → uses built-in minimal template
+    - create_cluster("app", "default") → uses built-in default template
+    - create_cluster("test", "default", addons=["ingress"]) → cluster with NGINX Ingress
+    - Pre-create .local/clusters/prod/kind-config.yaml → create_cluster("prod") uses custom config
 
     Available add-ons:
     - ingress: NGINX Ingress Controller for HTTP/HTTPS routing
 
     Args:
         name: Name for the cluster (lowercase alphanumeric with hyphens)
-        config: Configuration template or custom config name
-                Built-in templates: "minimal", "default", "custom"
-                Custom configs: any name (will look for kind-{name}.yaml)
+        config: Configuration template ("minimal" or "default")
         kubernetes_version: Kubernetes version to use (e.g., "v1.34.0", default: latest)
         addons: Optional list of add-on names to install (e.g., ["ingress"])
 
@@ -104,7 +101,7 @@ async def create_cluster(
     try:
         # Get cluster configuration with automatic discovery
         cluster_config_yaml, config_source = get_cluster_config(
-            config, name, infra_dir=_config.get_infra_path(), data_dir=Path(_config.data_dir)
+            config, name, data_dir=Path(_config.data_dir)
         )
 
         # Parse YAML string to dict for manipulation
