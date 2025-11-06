@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.2.0...butler-agent-v0.2.1) (2025-11-06)
+
+
+### Code Refactoring
+
+* **cluster:** consolidate lifecycle operations to create/remove model ([#34](https://github.com/danielscholl/butler-agent/issues/34)) ([e1ee284](https://github.com/danielscholl/butler-agent/commit/e1ee28405bf0803ae9c244e90ffc6f9bfa87e86c))
+
 ## [0.2.0](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.10...butler-agent-v0.2.0) (2025-11-06)
 
 
