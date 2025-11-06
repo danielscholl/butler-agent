@@ -3,7 +3,9 @@
 These functions are exposed as tools that the AI agent can use to manage KinD clusters.
 """
 
+import json
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,9 +19,7 @@ from agent.cluster.status import ClusterStatus
 from agent.config import AgentConfig
 from agent.utils.errors import (
     ClusterAlreadyExistsError,
-    ClusterAlreadyRunningError,
     ClusterNotFoundError,
-    ClusterNotRunningError,
     InvalidManifestError,
     KindCommandError,
     KubeconfigNotFoundError,
@@ -49,36 +49,75 @@ def initialize_tools(config: AgentConfig) -> None:
     _cluster_status = ClusterStatus(config)
 
 
+def _save_cluster_state(cluster_data_dir: Path, state: dict[str, Any]) -> None:
+    """Save cluster state to JSON file.
+
+    Args:
+        cluster_data_dir: Cluster data directory
+        state: State dictionary to save
+    """
+    cluster_data_dir.mkdir(parents=True, exist_ok=True)
+    state_file = cluster_data_dir / "cluster-state.json"
+    state_file.write_text(json.dumps(state, indent=2))
+    logger.debug(f"Saved cluster state to {state_file}")
+
+
+def _load_cluster_state(cluster_data_dir: Path) -> dict[str, Any] | None:
+    """Load cluster state from JSON file.
+
+    Args:
+        cluster_data_dir: Cluster data directory
+
+    Returns:
+        State dictionary or None if file doesn't exist
+    """
+    state_file = cluster_data_dir / "cluster-state.json"
+    if not state_file.exists():
+        return None
+
+    try:
+        state: dict[str, Any] = json.loads(state_file.read_text())
+        logger.debug(f"Loaded cluster state from {state_file}")
+        return state
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to load cluster state: {e}")
+        return None
+
+
 async def create_cluster(
     name: str,
     config: str = "default",
     kubernetes_version: str | None = None,
     addons: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Create a new KinD cluster with optional add-ons.
+    """Create a new cluster or restart a stopped one.
 
-    This tool creates a new Kubernetes in Docker (KinD) cluster with the specified
-    configuration. The cluster will be running locally and ready for deployment.
-    Optionally installs add-ons like NGINX Ingress Controller.
+    Smart behavior based on cluster state:
+    - **First-time creation**: If cluster data doesn't exist, creates new cluster with
+      specified config/addons and saves state for future restarts.
+    - **Restart from stopped**: If cluster data exists but cluster isn't running,
+      recreates cluster from saved configuration and reinstalls addons. Ignores
+      config/addons parameters (uses saved state).
+    - **Already running**: Returns error if cluster is currently running.
 
-    Configuration discovery (automatic):
-    1. Cluster-specific: .local/clusters/{name}/kind-config.yaml (if exists)
+    Configuration discovery (automatic for first-time creation):
+    1. Cluster-specific: .local/clusters/{name}/kind-config.yaml (if pre-created)
     2. Built-in templates: minimal, default
 
     Examples:
-    - create_cluster("dev", "minimal") → uses built-in minimal template
-    - create_cluster("app", "default") → uses built-in default template
-    - create_cluster("test", "default", addons=["ingress"]) → cluster with NGINX Ingress
-    - Pre-create .local/clusters/prod/kind-config.yaml → create_cluster("prod") uses custom config
+    - create_cluster("dev") → first-time with default config
+    - create_cluster("dev", "minimal") → first-time with minimal config
+    - create_cluster("dev", addons=["ingress"]) → first-time with ingress
+    - create_cluster("dev") → restart if dev was stopped (uses saved state)
 
     Available add-ons:
     - ingress: NGINX Ingress Controller for HTTP/HTTPS routing
 
     Args:
         name: Name for the cluster (lowercase alphanumeric with hyphens)
-        config: Configuration template ("minimal" or "default")
-        kubernetes_version: Kubernetes version to use (e.g., "v1.34.0", default: latest)
-        addons: Optional list of add-on names to install (e.g., ["ingress"])
+        config: Configuration template ("minimal" or "default") - only used for first-time
+        kubernetes_version: Kubernetes version (e.g., "v1.34.0") - only for first-time
+        addons: List of add-on names (e.g., ["ingress"]) - only for first-time
 
     Returns:
         Dict containing:
@@ -86,19 +125,111 @@ async def create_cluster(
         - status: Cluster status ("running")
         - kubernetes_version: K8s version used
         - nodes: Number of nodes
-        - kubeconfig_path: Path to kubeconfig file (if configured)
+        - kubeconfig_path: Path to kubeconfig file
         - config_source: Description of which config was used
-        - addons_installed: Dict of addon installation results (if addons specified)
+        - restarted: True if cluster was restarted from saved state
+        - addons_installed: Dict of addon installation results (if addons present)
         - message: Success message
 
     Raises:
-        ClusterAlreadyExistsError: If cluster with this name already exists
+        RuntimeError: If tools not initialized
         KindCommandError: If cluster creation fails
     """
     if not _kind_manager or not _config:
         raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
 
+    cluster_data_dir = _config.get_cluster_data_dir(name)
+    is_restart = cluster_data_dir.exists()
+
     try:
+        # Check if cluster is already running
+        if await _kind_manager.cluster_exists(name):
+            return {
+                "success": False,
+                "error": "cluster_already_running",
+                "message": f"Cluster '{name}' is already running. Use remove_cluster to stop it first if you want to recreate.",
+            }
+
+        # RESTART PATH: Recreate from saved state
+        if is_restart:
+            logger.info(f"Restarting cluster '{name}' from saved configuration")
+
+            # Load saved state
+            saved_state = _load_cluster_state(cluster_data_dir)
+            if not saved_state:
+                return {
+                    "success": False,
+                    "error": "missing_state",
+                    "message": f"Cluster '{name}' data exists but state file is missing or corrupt. Cannot restart.",
+                }
+
+            # Load saved config
+            saved_config_path = cluster_data_dir / "kind-config.yaml"
+            if not saved_config_path.exists():
+                return {
+                    "success": False,
+                    "error": "missing_config",
+                    "message": f"Cluster '{name}' data exists but configuration file is missing. Cannot restart.",
+                }
+
+            cluster_config_yaml = saved_config_path.read_text()
+            k8s_version = saved_state.get("kubernetes_version", _config.default_k8s_version)
+            saved_addons = saved_state.get("addons", [])
+
+            logger.info(f"Recreating cluster '{name}' with saved config, version {k8s_version}")
+
+            # Create cluster from saved config
+            result = await _kind_manager.create_cluster(name, cluster_config_yaml, k8s_version)
+
+            # Export and save kubeconfig
+            try:
+                kubeconfig_path = _config.get_kubeconfig_path(name)
+                kubeconfig_content = await _kind_manager.get_kubeconfig(name)
+                kubeconfig_path.write_text(kubeconfig_content)
+                result["kubeconfig_path"] = str(kubeconfig_path)
+                logger.info(f"Kubeconfig saved to {kubeconfig_path}")
+            except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
+                logger.warning(f"Failed to save kubeconfig: {e}")
+                result["kubeconfig_path"] = None
+
+            result["restarted"] = True
+            result["config_source"] = "saved configuration"
+
+            # Reinstall addons if they were configured
+            if saved_addons and result.get("kubeconfig_path"):
+                logger.info(
+                    f"Reinstalling {len(saved_addons)} add-on(s): {', '.join(saved_addons)}"
+                )
+                addon_manager = AddonManager(name, Path(result["kubeconfig_path"]))
+                addon_result = await addon_manager.install_addons(saved_addons)
+                result["addons_installed"] = addon_result
+
+                if addon_result.get("success"):
+                    result["success"] = True
+                    result["message"] = (
+                        f"Cluster '{name}' restarted successfully with {result['nodes']} node(s). "
+                        f"{addon_result['message']}"
+                    )
+                else:
+                    result["success"] = True
+                    result["message"] = (
+                        f"Cluster '{name}' restarted successfully with {result['nodes']} node(s). "
+                        f"Add-ons: {addon_result['message']}"
+                    )
+            else:
+                result["success"] = True
+                result["message"] = (
+                    f"Cluster '{name}' restarted successfully with {result['nodes']} node(s) "
+                    f"from saved configuration"
+                )
+
+            return result
+
+        # FIRST-TIME CREATION PATH
+        logger.info(f"Creating new cluster '{name}' (first-time)")
+
+        # Config already defaulted to "default" in function signature
+
         # Get cluster configuration with automatic discovery
         cluster_config_yaml, config_source = get_cluster_config(
             config, name, data_dir=Path(_config.data_dir)
@@ -156,7 +287,7 @@ async def create_cluster(
                         error_msg = (
                             f"Cannot create cluster '{name}' with ingress: "
                             f"ports 80/443 are in use by existing cluster '{conflicting_cluster}'. "
-                            f"Options: (1) Delete '{conflicting_cluster}' first, "
+                            f"Options: (1) Remove '{conflicting_cluster}' first, "
                             f"(2) Create '{name}' without ingress addon, or "
                             f"(3) Use alternative ports like 8080/8443."
                         )
@@ -181,7 +312,6 @@ async def create_cluster(
                     canonical_name = temp_manager.resolve_addon_name(addon_name)
 
                     # Get temporary addon instance for config collection
-                    # Note: kubeconfig path is ignored for pre-creation methods
                     temp_addon = temp_manager.get_addon_instance(canonical_name, None)
 
                     # Collect all requirements from this addon
@@ -219,9 +349,6 @@ async def create_cluster(
                 )
 
         # Convert cluster config dict back to YAML string for kind_manager
-        # Use safe_dump for security.
-        # The argument sort_keys=False preserves the original key order from the merged config dict
-        # (insertion order in Python 3.7+), making diffs more readable.
         cluster_config_yaml = yaml.safe_dump(
             cluster_config, default_flow_style=False, sort_keys=False
         )
@@ -234,31 +361,43 @@ async def create_cluster(
         # Create cluster with merged configuration
         result = await _kind_manager.create_cluster(name, cluster_config_yaml, k8s_version)
 
-        # Export and save kubeconfig if data directory is configured
-        if _config:
-            try:
-                kubeconfig_path = _config.get_kubeconfig_path(name)
-                kubeconfig_path.parent.mkdir(parents=True, exist_ok=True)
+        # Export and save kubeconfig
+        try:
+            kubeconfig_path = _config.get_kubeconfig_path(name)
+            kubeconfig_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Export kubeconfig from kind
-                kubeconfig_content = await _kind_manager.get_kubeconfig(name)
-                kubeconfig_path.write_text(kubeconfig_content)
+            # Export kubeconfig from kind
+            kubeconfig_content = await _kind_manager.get_kubeconfig(name)
+            kubeconfig_path.write_text(kubeconfig_content)
 
-                result["kubeconfig_path"] = str(kubeconfig_path)
-                logger.info(f"Kubeconfig saved to {kubeconfig_path}")
+            result["kubeconfig_path"] = str(kubeconfig_path)
+            logger.info(f"Kubeconfig saved to {kubeconfig_path}")
 
-                # Save config snapshot for future recreation
-                config_snapshot_path = kubeconfig_path.parent / "kind-config.yaml"
-                config_snapshot_path.write_text(cluster_config_yaml)
-                logger.info(f"Config snapshot saved to {config_snapshot_path}")
+            # Save config snapshot for future recreation
+            config_snapshot_path = kubeconfig_path.parent / "kind-config.yaml"
+            config_snapshot_path.write_text(cluster_config_yaml)
+            logger.info(f"Config snapshot saved to {config_snapshot_path}")
 
-            except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
-                logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
-                # Don't fail cluster creation if kubeconfig save fails
-                result["kubeconfig_path"] = None
+            # Save cluster state for restart
+            cluster_state = {
+                "addons": addons or [],
+                "kubernetes_version": k8s_version,
+                "config_template": config,
+                "created_at": datetime.now().isoformat(),
+            }
+            _save_cluster_state(cluster_data_dir, cluster_state)
+            logger.info("Cluster state saved")
+
+        except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
+            logger.warning(f"Failed to save kubeconfig or state for cluster '{name}': {e}")
+            result["kubeconfig_path"] = None
+            result["state_save_failed"] = True
+            result["warning"] = (
+                f"Cluster created successfully but state not saved: {e}. Future restart may fail."
+            )
 
         result["config_source"] = config_source
-        # Don't set success=True yet - wait until all operations complete
+        result["restarted"] = False
 
         # PHASE 2: Install add-ons (post-cluster creation, only if kubeconfig saved successfully)
         if addons and result.get("kubeconfig_path"):
@@ -297,7 +436,10 @@ async def create_cluster(
         return {
             "success": False,
             "error": str(e),
-            "message": f"Cluster '{name}' already exists. Use a different name or delete the existing cluster first.",
+            "message": (
+                f"Cluster '{name}' already exists. Wait for any in-progress operations to complete, "
+                f"or use remove_cluster to stop it first."
+            ),
         }
     except (FileNotFoundError, ValueError) as e:
         return {
@@ -320,80 +462,111 @@ async def create_cluster(
         }
 
 
-async def delete_cluster(
-    name: str, preserve_data: bool = False, confirmed: bool = False
+async def remove_cluster(
+    name: str, purge_data: bool = False, confirmed: bool = False
 ) -> dict[str, Any]:
-    """Delete a KinD cluster.
+    """Remove a cluster, optionally purging all data.
 
-    This tool deletes an existing KinD cluster. The cluster and all its resources
-    will be permanently removed. This is a destructive operation that requires
-    user confirmation.
+    This tool stops a running cluster by removing its containers. By default,
+    cluster configuration and data are preserved so the cluster can be restarted
+    later with create_cluster.
+
+    Behavior:
+    - **Default (purge_data=False)**: Stops cluster, keeps data for restart. No confirmation needed.
+    - **With purge_data=True**: Stops cluster AND deletes all data permanently. Requires confirmation.
 
     Args:
-        name: Name of the cluster to delete
-        preserve_data: Whether to preserve cluster data directory (default: False)
-        confirmed: Whether user has confirmed the deletion (default: False)
+        name: Name of the cluster to remove
+        purge_data: If False (default), stops cluster and preserves data.
+                   If True, stops cluster AND deletes all data (requires confirmation).
+        confirmed: User confirmation flag (auto-set by agent for purge operations)
 
     Returns:
         Dict containing:
-        - success: Whether deletion was successful
-        - confirmation_required: If True, user confirmation needed
+        - success: Whether removal was successful
+        - confirmation_required: If True, user confirmation needed (purge_data=True only)
+        - data_deleted: Whether data was deleted
         - message: Status message
+
+    Examples:
+        - remove_cluster("dev") → stops dev, keeps data for restart
+        - remove_cluster("test", purge_data=True) → asks for confirmation first
+        - remove_cluster("test", purge_data=True, confirmed=True) → deletes test and all data
 
     Raises:
         ClusterNotFoundError: If cluster doesn't exist
-        KindCommandError: If deletion fails
+        KindCommandError: If removal fails
     """
     if not _kind_manager or not _config:
         raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
 
-    # Require confirmation for destructive operation
-    if not confirmed:
+    # Require confirmation ONLY if purging data
+    if purge_data and not confirmed:
         cluster_data_dir = _config.get_cluster_data_dir(name)
         return {
             "success": False,
             "confirmation_required": True,
             "cluster_name": name,
-            "preserve_data": preserve_data,
-            "message": f"Deleting cluster '{name}' is permanent. This will remove the cluster and "
-            + ("preserve" if preserve_data else "delete")
-            + f" data in {cluster_data_dir}/. Do you want to proceed?",
+            "purge_data": True,
+            "message": (
+                f"This will permanently delete cluster '{name}' and ALL data in {cluster_data_dir}/. "
+                f"The cluster cannot be restarted after purging. Do you want to proceed?"
+            ),
         }
 
     try:
-        logger.info(f"Deleting cluster '{name}' (preserve_data={preserve_data})")
+        # Check if cluster exists (either running or stopped with data)
+        cluster_running = await _kind_manager.cluster_exists(name)
+        cluster_data_dir = _config.get_cluster_data_dir(name)
+        cluster_data_exists = cluster_data_dir.exists()
 
-        result = await _kind_manager.delete_cluster(name)
+        if not cluster_running and not cluster_data_exists:
+            return {
+                "success": False,
+                "error": "cluster_not_found",
+                "message": f"Cluster '{name}' not found (no running cluster or saved data). Use list_clusters to see available clusters.",
+            }
 
-        # Handle data directory cleanup if preserve_data=False
-        if not preserve_data and _config:
-            cluster_data_dir = _config.get_cluster_data_dir(name)
-            if cluster_data_dir.exists():
+        # Stop cluster if running
+        if cluster_running:
+            logger.info(f"Stopping cluster '{name}' (purge_data={purge_data})")
+            result = await _kind_manager.delete_cluster(name)
+        else:
+            logger.info(f"Cluster '{name}' not running, proceeding with data cleanup if requested")
+            result = {"success": True, "cluster_name": name}
+
+        # Handle data directory cleanup if purge_data=True
+        if purge_data:
+            if cluster_data_exists:
                 try:
                     import shutil
 
                     shutil.rmtree(cluster_data_dir)
-                    logger.info(f"Deleted cluster data directory: {cluster_data_dir}")
+                    logger.info(f"Purged cluster data directory: {cluster_data_dir}")
                     result["data_deleted"] = True
                     result["message"] = (
-                        f"Cluster '{name}' deleted successfully. "
-                        f"Data directory removed: {cluster_data_dir}"
+                        f"Cluster '{name}' removed and all data permanently deleted."
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to delete cluster data directory: {e}")
+                    logger.error(f"Failed to purge cluster data directory: {e}")
                     result["data_deleted"] = False
+                    result["data_purge_failed"] = True
                     result["message"] = (
-                        f"Cluster '{name}' deleted but failed to remove data directory: {e}"
+                        f"Cluster '{name}' stopped successfully, but failed to purge data directory: {e}"
                     )
             else:
-                logger.debug(f"No data directory found for cluster '{name}'")
+                result["data_deleted"] = False
+                result["message"] = f"Cluster '{name}' removed (no data directory found to purge)."
         else:
+            # Default: preserve data for restart
             result["data_deleted"] = False
-            if preserve_data:
+            if cluster_data_exists:
                 result["message"] = (
-                    f"Cluster '{name}' deleted successfully. "
-                    f"Data preserved in {_config.get_cluster_data_dir(name)}"
+                    f"Cluster '{name}' stopped. Configuration saved in {cluster_data_dir}. "
+                    f"Use create_cluster('{name}') to restart."
                 )
+            else:
+                result["message"] = f"Cluster '{name}' removed (no configuration data found)."
 
         return result
 
@@ -407,45 +580,80 @@ async def delete_cluster(
         return {
             "success": False,
             "error": str(e),
-            "message": f"Failed to delete cluster '{name}': {e}",
+            "message": f"Failed to remove cluster '{name}': {e}",
         }
     except Exception as e:
-        logger.exception(f"Unexpected error deleting cluster '{name}'")
+        logger.exception(f"Unexpected error removing cluster '{name}'")
         return {
             "success": False,
             "error": str(e),
-            "message": f"Unexpected error deleting cluster: {e}",
+            "message": f"Unexpected error removing cluster: {e}",
         }
 
 
 async def list_clusters() -> dict[str, Any]:
-    """List all KinD clusters.
+    """List all clusters (running and stopped).
 
-    This tool lists all existing KinD clusters on the system.
+    This tool lists all clusters on the system, showing which are currently
+    running and which are stopped (have saved configuration but aren't running).
+
+    Running clusters: Currently active in Docker
+    Stopped clusters: Have saved data in .local/clusters/ but containers removed
 
     Returns:
         Dict containing:
-        - clusters: List of cluster names
-        - total: Total number of clusters
+        - running: List of running cluster names
+        - stopped: List of stopped cluster names (can be restarted)
+        - total: Total number of clusters (running + stopped)
         - message: Summary message
+
+    Examples:
+        {"running": ["dev", "staging"], "stopped": ["test"], "total": 3}
+        {"running": [], "stopped": ["old-cluster"], "total": 1}
     """
-    if not _kind_manager:
+    if not _kind_manager or not _config:
         raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
 
     try:
         logger.info("Listing all clusters")
 
-        clusters = await _kind_manager.list_clusters()
+        # Get running clusters from kind
+        running_clusters = await _kind_manager.list_clusters()
+
+        # Get stopped clusters by checking data directories
+        stopped_clusters = []
+        clusters_dir = Path(_config.data_dir) / "clusters"
+        if clusters_dir.exists():
+            for cluster_dir in clusters_dir.iterdir():
+                if cluster_dir.is_dir():
+                    cluster_name = cluster_dir.name
+                    # Only include if not currently running
+                    if cluster_name not in running_clusters:
+                        # Verify it has valid cluster data (state file or config)
+                        has_state = (cluster_dir / "cluster-state.json").exists()
+                        has_config = (cluster_dir / "kind-config.yaml").exists()
+                        if has_state or has_config:
+                            stopped_clusters.append(cluster_name)
+
+        total = len(running_clusters) + len(stopped_clusters)
+
+        # Build summary message
+        if total == 0:
+            message = "No clusters found. Use create_cluster to create a new cluster."
+        else:
+            parts = []
+            if running_clusters:
+                parts.append(f"{len(running_clusters)} running")
+            if stopped_clusters:
+                parts.append(f"{len(stopped_clusters)} stopped")
+            message = f"Found {total} cluster(s): {', '.join(parts)}"
 
         return {
             "success": True,
-            "clusters": clusters,
-            "total": len(clusters),
-            "message": (
-                f"Found {len(clusters)} cluster(s)"
-                if clusters
-                else "No clusters found. Use create_cluster to create a new cluster."
-            ),
+            "running": running_clusters,
+            "stopped": stopped_clusters,
+            "total": total,
+            "message": message,
         }
 
     except KindCommandError as e:
@@ -556,192 +764,6 @@ def get_cluster_health(name: str) -> dict[str, Any]:
             "healthy": False,
             "error": str(e),
             "message": f"Unexpected error checking cluster health: {e}",
-        }
-
-
-async def start_cluster(name: str) -> dict[str, Any]:
-    """Start a stopped KinD cluster.
-
-    This tool starts a previously stopped cluster without recreating it.
-    The cluster resumes with all its previous state and data intact.
-    This is useful for saving resources when not actively developing.
-
-    Args:
-        name: Name of the cluster to start
-
-    Returns:
-        Dict containing:
-        - cluster_name: Name of the cluster
-        - status: Cluster status ("running")
-        - startup_time_seconds: Time taken to start
-        - message: Success message
-
-    Raises:
-        ClusterNotFoundError: If cluster doesn't exist
-        ClusterAlreadyRunningError: If cluster is already running
-        KindCommandError: If startup fails
-    """
-    if not _kind_manager:
-        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
-
-    try:
-        logger.info(f"Starting cluster '{name}'")
-
-        result = await _kind_manager.start_cluster(name)
-        result["success"] = True
-        result["message"] = (
-            f"Cluster '{name}' started successfully in {result['startup_time_seconds']} seconds"
-        )
-
-        return result
-
-    except ClusterNotFoundError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Cluster '{name}' not found. Use list_clusters to see available clusters.",
-        }
-    except ClusterAlreadyRunningError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Cluster '{name}' is already running.",
-        }
-    except KindCommandError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Failed to start cluster '{name}': {e}",
-        }
-    except Exception as e:
-        logger.exception(f"Unexpected error starting cluster '{name}'")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Unexpected error starting cluster: {e}",
-        }
-
-
-async def stop_cluster(name: str) -> dict[str, Any]:
-    """Stop a running KinD cluster without deleting it.
-
-    This tool stops a cluster to save resources while preserving all data
-    and configuration. The cluster can be restarted later with start_cluster.
-    Use this when you want to pause development without losing your work.
-
-    Note: This is different from delete_cluster - stopped clusters preserve
-    all state and can be restarted quickly.
-
-    Args:
-        name: Name of the cluster to stop
-
-    Returns:
-        Dict containing:
-        - cluster_name: Name of the cluster
-        - status: Cluster status ("stopped")
-        - message: Success message
-
-    Raises:
-        ClusterNotFoundError: If cluster doesn't exist
-        ClusterNotRunningError: If cluster is not running
-        KindCommandError: If stopping fails
-    """
-    if not _kind_manager:
-        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
-
-    try:
-        logger.info(f"Stopping cluster '{name}'")
-
-        result = await _kind_manager.stop_cluster(name)
-        result["success"] = True
-        result["message"] = (
-            f"Cluster '{name}' stopped successfully. Data preserved. "
-            f"Use start_cluster to resume."
-        )
-
-        return result
-
-    except ClusterNotFoundError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Cluster '{name}' not found. Use list_clusters to see available clusters.",
-        }
-    except ClusterNotRunningError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Cluster '{name}' is not running.",
-        }
-    except KindCommandError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Failed to stop cluster '{name}': {e}",
-        }
-    except Exception as e:
-        logger.exception(f"Unexpected error stopping cluster '{name}'")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Unexpected error stopping cluster: {e}",
-        }
-
-
-async def restart_cluster(name: str) -> dict[str, Any]:
-    """Restart a KinD cluster (stop + start cycle).
-
-    This tool performs a quick restart of a cluster, useful during
-    development iteration when you need to reset the cluster state
-    or apply configuration changes. Faster than delete + recreate.
-
-    Args:
-        name: Name of the cluster to restart
-
-    Returns:
-        Dict containing:
-        - cluster_name: Name of the cluster
-        - status: Cluster status ("running")
-        - startup_time_seconds: Time taken to restart
-        - message: Success message
-
-    Raises:
-        ClusterNotFoundError: If cluster doesn't exist
-        KindCommandError: If restart fails
-    """
-    if not _kind_manager:
-        raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
-
-    try:
-        logger.info(f"Restarting cluster '{name}'")
-
-        result = await _kind_manager.restart_cluster(name)
-        result["success"] = True
-        result["message"] = (
-            f"Cluster '{name}' restarted successfully in "
-            f"{result['startup_time_seconds']} seconds"
-        )
-
-        return result
-
-    except ClusterNotFoundError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Cluster '{name}' not found. Use list_clusters to see available clusters.",
-        }
-    except KindCommandError as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Failed to restart cluster '{name}': {e}",
-        }
-    except Exception as e:
-        logger.exception(f"Unexpected error restarting cluster '{name}'")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": f"Unexpected error restarting cluster: {e}",
         }
 
 
@@ -1137,13 +1159,10 @@ async def kubectl_describe(
 # Tool metadata for agent framework
 CLUSTER_TOOLS = [
     create_cluster,
-    delete_cluster,
+    remove_cluster,
     list_clusters,
     cluster_status,
     get_cluster_health,
-    start_cluster,
-    stop_cluster,
-    restart_cluster,
     kubectl_get_resources,
     kubectl_apply,
     kubectl_delete,

@@ -38,13 +38,11 @@ allowed-tools: All cluster management tools
 
   <capabilities>
     <category name="cluster-lifecycle" platform="kind">
-      <capability>Create clusters with templates (minimal/default/custom) or custom YAML configs</capability>
-      <capability>Start stopped clusters (~5s resume with preserved state)</capability>
-      <capability>Stop running clusters (preserves all data and configuration)</capability>
-      <capability>Restart clusters (quick stop + start for iteration)</capability>
-      <capability>Delete clusters (permanent removal)</capability>
-      <capability>Status checks (health, nodes, resource usage)</capability>
-      <capability>List all available clusters</capability>
+      <capability>Create clusters: First-time creation OR restart from saved configuration</capability>
+      <capability>Remove clusters: Stop (preserves data) OR purge (deletes all data)</capability>
+      <capability>List clusters: Shows running vs stopped clusters</capability>
+      <capability>Status checks: Health, nodes, resource usage for running clusters</capability>
+      <note>Stopped clusters can be restarted instantly with create_cluster using saved state</note>
     </category>
 
     <category name="resource-management" platform="kubernetes">
@@ -86,49 +84,64 @@ allowed-tools: All cluster management tools
   </capabilities>
 
   <operation-guidelines>
-    <stop-vs-delete>
-      <operation name="stop">
-        <use-case>Temporary pause, save resources, breaks/battery saving</use-case>
-        <behavior>Preserves all state, data, configuration</behavior>
-        <startup>~5s restart time</startup>
-      </operation>
-      <operation name="delete">
-        <use-case>Permanent removal, truly done with cluster</use-case>
-        <behavior>Frees all Docker resources, optionally deletes .local/clusters/{name}/ data</behavior>
-        <startup>~15-30s to recreate</startup>
-        <data-cleanup>By default, deletes cluster data. Use preserve_data=true to keep config snapshots</data-cleanup>
-      </operation>
-    </stop-vs-delete>
+    <lifecycle-model>
+      <create-cluster operation="create_cluster">
+        <first-time>Creates new cluster with specified config/addons. Saves state automatically.</first-time>
+        <restart>If cluster data exists, ignores config/addons params and recreates from saved state.</restart>
+        <behavior>Smart detection: checks if .local/clusters/{name}/ exists to determine path</behavior>
+        <startup-time>15-30s for both first-time and restart (full cluster recreation; previously, restart was ~5s via Docker container resume)</startup-time>
+        <note>User says "create" OR "start" - both map to create_cluster(name)</note>
+        <note>Behavioral change: Restart now performs full cluster recreation, which is slower than previous (~5s) Docker container resume. This ensures cluster consistency and reliability.</note>
+      </create-cluster>
+
+      <remove-cluster operation="remove_cluster">
+        <stop-default>Default behavior: removes containers, preserves data. No confirmation needed.</stop-default>
+        <purge-option>With purge_data=true: removes containers AND deletes all data. Requires confirmation.</purge-option>
+        <behavior>Stops running cluster by removing Docker containers. Data preserved unless purging.</behavior>
+        <note>User says "stop" → remove_cluster(name). User says "delete" → remove_cluster(name, purge_data=True)</note>
+      </remove-cluster>
+
+      <intent-mapping importance="critical">
+        <user-says action="actual-command">
+          <intent phrase="create a cluster called dev">create_cluster("dev")</intent>
+          <intent phrase="start dev">create_cluster("dev")  # Restarts if stopped</intent>
+          <intent phrase="stop dev">remove_cluster("dev")  # Default: preserve data</intent>
+          <intent phrase="delete dev">remove_cluster("dev", purge_data=True)  # Requires confirmation</intent>
+          <intent phrase="remove dev">remove_cluster("dev")  # Default: preserve data</intent>
+        </user-says>
+      </intent-mapping>
+    </lifecycle-model>
 
     <destructive-operations>
-      <delete-cluster-workflow importance="critical">
-        <step1>Call delete_cluster without confirmed parameter first</step1>
+      <purge-cluster-workflow importance="critical">
+        <step1>Call remove_cluster with purge_data=True without confirmed parameter first</step1>
         <step2>Tool returns confirmation_required=true with details</step2>
         <step3>Present message to user and ask "yes" or "no"</step3>
-        <step4>If user confirms, call delete_cluster again with confirmed=true</step4>
+        <step4>If user confirms, call remove_cluster again with purge_data=True, confirmed=True</step4>
         <step5>If user declines, acknowledge and do not proceed</step5>
         <note>The tool handles confirmation - always call without confirmed first</note>
-      </delete-cluster-workflow>
-      <rule mode="interactive">Always confirm destructive operations before execution</rule>
-      <rule importance="high">Never execute delete without user confirmation</rule>
+      </purge-cluster-workflow>
+      <rule mode="interactive">Only confirm when purging data (purge_data=True)</rule>
+      <rule importance="high">Stopping clusters (default remove) does NOT require confirmation</rule>
     </destructive-operations>
 
     <best-practices>
       <practice>Be concise and practical in responses</practice>
       <practice>Provide helpful error context with suggested next steps</practice>
-      <practice>Suggest stop over delete when cluster might be needed again</practice>
-      <practice>If cluster doesn't exist when needed, suggest creating one</practice>
-      <practice>Proactively suggest optimizations (stop/start for faster iteration)</practice>
+      <practice>Suggest "remove" (stop) over "purge" when cluster might be needed again</practice>
+      <practice>If stopped cluster exists, remind user they can restart with create_cluster</practice>
+      <practice>When listing clusters, clearly distinguish running vs stopped</practice>
       <practice>For custom configs, guide users to pre-create .local/clusters/{name}/kind-config.yaml</practice>
-      <practice>Remind users that config snapshots are automatically saved to .local/clusters/{name}/ for easy recreation</practice>
+      <practice>Remind users that state is automatically saved for easy restart</practice>
     </best-practices>
   </operation-guidelines>
 
   <technical-notes>
     <note>KinD clusters run locally in Docker containers</note>
     <note>Each cluster has kubeconfig stored at .local/clusters/{cluster-name}/kubeconfig</note>
+    <note>State file (.local/clusters/{cluster-name}/cluster-state.json) tracks addons, k8s version, config</note>
     <note>Config snapshots automatically saved to .local/clusters/{cluster-name}/kind-config.yaml</note>
-    <note>Stop/start preserves all pods, data, and configuration</note>
+    <note>Stopped clusters = data preserved, containers removed, can restart with create_cluster</note>
     <note>Cluster names must be lowercase with hyphens</note>
     <note>Two built-in templates: minimal (1 control-plane), default (1 control-plane + 1 worker)</note>
     <note>For custom configs, users pre-create .local/clusters/{name}/kind-config.yaml</note>

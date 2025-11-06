@@ -69,8 +69,14 @@ async def test_create_cluster_without_addons(mock_write, mock_mkdir, mock_get_co
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
+@patch("agent.utils.port_checker.check_ingress_ports")
 async def test_create_cluster_with_addons(
-    mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
+    mock_check_ports,
+    mock_addon_manager_class,
+    mock_write,
+    mock_mkdir,
+    mock_get_config,
+    setup_tools,
 ):
     """Test cluster creation with add-ons (two-phase pattern)."""
     # setup_tools fixture needed for its side effects (setting up mocks)
@@ -78,6 +84,9 @@ async def test_create_cluster_with_addons(
         "nodes:\n- role: control-plane\n",
         "built-in default",
     )
+
+    # Mock port checker to return available ports
+    mock_check_ports.return_value = {"available": True, "conflicts": []}
 
     # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
@@ -120,14 +129,23 @@ async def test_create_cluster_with_addons(
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
+@patch("agent.utils.port_checker.check_ingress_ports")
 async def test_create_cluster_addon_failure(
-    mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
+    mock_check_ports,
+    mock_addon_manager_class,
+    mock_write,
+    mock_mkdir,
+    mock_get_config,
+    setup_tools,
 ):
     """Test cluster creation when addon fails (cluster should still succeed)."""
     mock_get_config.return_value = (
         "nodes:\n- role: control-plane\n",
         "built-in default",
     )
+
+    # Mock port checker to return available ports
+    mock_check_ports.return_value = {"available": True, "conflicts": []}
 
     # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
@@ -168,14 +186,23 @@ async def test_create_cluster_addon_failure(
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
+@patch("agent.utils.port_checker.check_ingress_ports")
 async def test_create_cluster_multiple_addons(
-    mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
+    mock_check_ports,
+    mock_addon_manager_class,
+    mock_write,
+    mock_mkdir,
+    mock_get_config,
+    setup_tools,
 ):
     """Test cluster creation with multiple add-ons."""
     mock_get_config.return_value = (
         "nodes:\n- role: control-plane\n",
         "built-in default",
     )
+
+    # Mock port checker to return available ports
+    mock_check_ports.return_value = {"available": True, "conflicts": []}
 
     # Mock addon manager for both phases
     mock_addon_manager = MagicMock()
@@ -217,8 +244,14 @@ async def test_create_cluster_multiple_addons(
 @patch("agent.cluster.tools.Path.mkdir")
 @patch("agent.cluster.tools.Path.write_text")
 @patch("agent.cluster.tools.AddonManager")
+@patch("agent.utils.port_checker.check_ingress_ports")
 async def test_create_cluster_addon_without_kubeconfig(
-    mock_addon_manager_class, mock_write, mock_mkdir, mock_get_config, setup_tools
+    mock_check_ports,
+    mock_addon_manager_class,
+    mock_write,
+    mock_mkdir,
+    mock_get_config,
+    setup_tools,
 ):
     """Test that addons are skipped if kubeconfig is not saved."""
     mocks = setup_tools
@@ -226,6 +259,9 @@ async def test_create_cluster_addon_without_kubeconfig(
         "nodes:\n- role: control-plane\n",
         "built-in default",
     )
+
+    # Mock port checker to return available ports
+    mock_check_ports.return_value = {"available": True, "conflicts": []}
 
     # Mock addon manager for Phase 1 (config collection still happens)
     mock_addon_manager = MagicMock()
