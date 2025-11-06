@@ -279,7 +279,7 @@ async def create_cluster(
                     f"using {config_source}. {addon_result['message']}"
                 )
             else:
-                result["success"] = False
+                result["success"] = True
                 result["message"] = (
                     f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
                     f"using {config_source}. Add-ons: {addon_result['message']}"
