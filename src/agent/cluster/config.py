@@ -111,7 +111,10 @@ def discover_config_file(
     if data_dir:
         cluster_config = data_dir / "clusters" / cluster_name / "kind-config.yaml"
         if cluster_config.exists():
-            return cluster_config, f"Cluster-specific config: .local/clusters/{cluster_name}/kind-config.yaml"
+            return (
+                cluster_config,
+                f"Cluster-specific config: .local/clusters/{cluster_name}/kind-config.yaml",
+            )
 
     # Ensure infra directory exists for remaining checks
     if not infra_dir.exists():

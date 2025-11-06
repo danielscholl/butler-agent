@@ -3,9 +3,12 @@
 import json
 import logging
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.utils.errors import ClusterNotFoundError, KindCommandError
+
+if TYPE_CHECKING:
+    from agent.config import AgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +16,13 @@ logger = logging.getLogger(__name__)
 class ClusterStatus:
     """Cluster status and health checking operations."""
 
-    def __init__(self):
-        """Initialize cluster status checker."""
-        pass
+    def __init__(self, config: "AgentConfig | None" = None):
+        """Initialize cluster status checker.
+
+        Args:
+            config: Optional AgentConfig for path resolution
+        """
+        self.config = config
 
     def get_cluster_status(self, name: str) -> dict[str, Any]:
         """Get comprehensive cluster status.
@@ -205,6 +212,7 @@ class ClusterStatus:
         context = f"kind-{name}"
 
         # Method 1: Check Helm releases (for addons installed via create_cluster)
+        # Use --kube-context for consistency with kubectl
         try:
             result = subprocess.run(
                 [
@@ -212,8 +220,8 @@ class ClusterStatus:
                     "list",
                     "--namespace",
                     "kube-system",
-                    "--kubeconfig",
-                    f".local/clusters/{name}/kubeconfig",
+                    "--kube-context",
+                    context,
                     "-o",
                     "json",
                 ],
@@ -230,9 +238,7 @@ class ClusterStatus:
                 }
 
                 for canonical_name, release_names in helm_addon_map.items():
-                    found = next(
-                        (r for r in releases if r.get("name") in release_names), None
-                    )
+                    found = next((r for r in releases if r.get("name") in release_names), None)
                     if found:
                         addons[canonical_name] = {
                             "installed": True,
