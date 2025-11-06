@@ -437,7 +437,8 @@ async def create_cluster(
             "success": False,
             "error": str(e),
             "message": (
-                f"Cluster '{name}' already exists. This may be due to a race condition or concurrent operation."
+                f"Cluster '{name}' already exists. Wait for any in-progress operations to complete, "
+                f"or use remove_cluster to stop it first."
             ),
         }
     except (FileNotFoundError, ValueError) as e:
