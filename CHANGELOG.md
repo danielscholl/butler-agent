@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.8...butler-agent-v0.1.9) (2025-11-06)
+
+
+### Features
+
+* migrate to .local storage with enhanced cluster config management ([#27](https://github.com/danielscholl/butler-agent/issues/27)) ([859c782](https://github.com/danielscholl/butler-agent/commit/859c7821498a3813aeb18bb978aa88458232592c))
+
 ## [0.1.8](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.7...butler-agent-v0.1.8) (2025-11-05)
 
 
