@@ -58,7 +58,7 @@ class ClusterStatus:
                 logger.debug(f"Could not get resource usage: {e}")
                 status["resource_usage"] = None
 
-            # Detect installed addons (requires helm)
+            # Detect installed addons (requires Helm)
             try:
                 addons = self.detect_addons(name)
                 if addons:

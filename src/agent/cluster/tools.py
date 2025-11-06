@@ -261,7 +261,7 @@ async def create_cluster(
                 result["kubeconfig_path"] = None
 
         result["config_source"] = config_source
-        result["success"] = True  # Mark as successful
+        # Don't set success=True yet - wait until all operations complete
 
         # PHASE 2: Install add-ons (post-cluster creation, only if kubeconfig saved successfully)
         if addons and result.get("kubeconfig_path"):
@@ -271,20 +271,24 @@ async def create_cluster(
 
             result["addons_installed"] = addon_result
 
-            # Update message
+            # Update message and success based on addon installation
             if addon_result.get("success"):
+                result["success"] = True
                 result["message"] = (
                     f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
                     f"using {config_source}. {addon_result['message']}"
                 )
             else:
+                result["success"] = False
                 result["message"] = (
                     f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
                     f"using {config_source}. Add-ons: {addon_result['message']}"
                 )
-                # Log warning but don't fail cluster creation
+                # Log warning about addon failures
                 logger.warning(f"Some add-ons failed to install: {addon_result.get('failed', [])}")
         else:
+            # No addons to install, cluster creation was successful
+            result["success"] = True
             result["message"] = (
                 f"Cluster '{name}' created successfully with {result['nodes']} node(s) "
                 f"using {config_source}"
