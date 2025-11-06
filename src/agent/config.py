@@ -39,8 +39,8 @@ class AgentConfig:
     azure_openai_api_version: str = "2025-03-01-preview"
 
     # Agent Configuration
-    data_dir: str = "./data"
-    infra_dir: str = "./data/infra"
+    data_dir: str = ".local"
+    infra_dir: str = ".local/infra"
     cluster_prefix: str = "butler-"
     default_k8s_version: str = "v1.34.0"
     log_level: str = "info"
@@ -138,7 +138,7 @@ class AgentConfig:
         Returns:
             Path to cluster data directory
         """
-        return Path(self.data_dir) / cluster_name
+        return Path(self.data_dir) / "clusters" / cluster_name
 
     def get_kubeconfig_path(self, cluster_name: str) -> Path:
         """Get kubeconfig file path for a specific cluster.

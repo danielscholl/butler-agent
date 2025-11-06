@@ -46,7 +46,7 @@ def initialize_tools(config: AgentConfig) -> None:
     _config = config
     _kind_manager = KindManager()
     _kubectl_manager = KubectlManager(config)
-    _cluster_status = ClusterStatus()
+    _cluster_status = ClusterStatus(config)
 
 
 async def create_cluster(
@@ -104,7 +104,7 @@ async def create_cluster(
     try:
         # Get cluster configuration with automatic discovery
         cluster_config_yaml, config_source = get_cluster_config(
-            config, name, infra_dir=_config.get_infra_path()
+            config, name, infra_dir=_config.get_infra_path(), data_dir=Path(_config.data_dir)
         )
 
         # Parse YAML string to dict for manipulation
@@ -180,9 +180,8 @@ async def create_cluster(
             addon_requirements = []
             for addon_name in addons:
                 try:
-                    # Validate addon name
-                    normalized_name = temp_manager._validate_addon_name(addon_name)
-                    canonical_name = temp_manager._alias_map[normalized_name]
+                    # Resolve addon name to canonical form
+                    canonical_name = temp_manager.resolve_addon_name(addon_name)
 
                     # Get temporary addon instance for config collection
                     # Note: kubeconfig path is ignored for pre-creation methods
@@ -250,12 +249,19 @@ async def create_cluster(
 
                 result["kubeconfig_path"] = str(kubeconfig_path)
                 logger.info(f"Kubeconfig saved to {kubeconfig_path}")
+
+                # Save config snapshot for future recreation
+                config_snapshot_path = kubeconfig_path.parent / "kind-config.yaml"
+                config_snapshot_path.write_text(cluster_config_yaml)
+                logger.info(f"Config snapshot saved to {config_snapshot_path}")
+
             except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
                 logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
                 # Don't fail cluster creation if kubeconfig save fails
                 result["kubeconfig_path"] = None
 
         result["config_source"] = config_source
+        result["success"] = True  # Mark as successful
 
         # PHASE 2: Install add-ons (post-cluster creation, only if kubeconfig saved successfully)
         if addons and result.get("kubeconfig_path"):
@@ -313,34 +319,80 @@ async def create_cluster(
         }
 
 
-async def delete_cluster(name: str, preserve_data: bool = True) -> dict[str, Any]:
+async def delete_cluster(
+    name: str, preserve_data: bool = False, confirmed: bool = False
+) -> dict[str, Any]:
     """Delete a KinD cluster.
 
     This tool deletes an existing KinD cluster. The cluster and all its resources
-    will be permanently removed.
+    will be permanently removed. This is a destructive operation that requires
+    user confirmation.
 
     Args:
         name: Name of the cluster to delete
-        preserve_data: Whether to preserve cluster data directory (default: True)
+        preserve_data: Whether to preserve cluster data directory (default: False)
+        confirmed: Whether user has confirmed the deletion (default: False)
 
     Returns:
         Dict containing:
         - success: Whether deletion was successful
+        - confirmation_required: If True, user confirmation needed
         - message: Status message
 
     Raises:
         ClusterNotFoundError: If cluster doesn't exist
         KindCommandError: If deletion fails
     """
-    if not _kind_manager:
+    if not _kind_manager or not _config:
         raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    # Require confirmation for destructive operation
+    if not confirmed:
+        cluster_data_dir = _config.get_cluster_data_dir(name)
+        return {
+            "success": False,
+            "confirmation_required": True,
+            "cluster_name": name,
+            "preserve_data": preserve_data,
+            "message": f"Deleting cluster '{name}' is permanent. This will remove the cluster and "
+            + ("preserve" if preserve_data else "delete")
+            + f" data in {cluster_data_dir}/. Do you want to proceed?",
+        }
 
     try:
         logger.info(f"Deleting cluster '{name}' (preserve_data={preserve_data})")
 
         result = await _kind_manager.delete_cluster(name)
 
-        # TODO: Handle data directory cleanup if preserve_data=False
+        # Handle data directory cleanup if preserve_data=False
+        if not preserve_data and _config:
+            cluster_data_dir = _config.get_cluster_data_dir(name)
+            if cluster_data_dir.exists():
+                try:
+                    import shutil
+
+                    shutil.rmtree(cluster_data_dir)
+                    logger.info(f"Deleted cluster data directory: {cluster_data_dir}")
+                    result["data_deleted"] = True
+                    result["message"] = (
+                        f"Cluster '{name}' deleted successfully. "
+                        f"Data directory removed: {cluster_data_dir}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to delete cluster data directory: {e}")
+                    result["data_deleted"] = False
+                    result["message"] = (
+                        f"Cluster '{name}' deleted but failed to remove data directory: {e}"
+                    )
+            else:
+                logger.debug(f"No data directory found for cluster '{name}'")
+        else:
+            result["data_deleted"] = False
+            if preserve_data:
+                result["message"] = (
+                    f"Cluster '{name}' deleted successfully. "
+                    f"Data preserved in {_config.get_cluster_data_dir(name)}"
+                )
 
         return result
 
@@ -385,6 +437,7 @@ async def list_clusters() -> dict[str, Any]:
         clusters = await _kind_manager.list_clusters()
 
         return {
+            "success": True,
             "clusters": clusters,
             "total": len(clusters),
             "message": (
@@ -446,6 +499,7 @@ async def cluster_status(name: str) -> dict[str, Any]:
             }
 
         status = _cluster_status.get_cluster_status(name)
+        status["success"] = True
         status["message"] = (
             f"Cluster '{name}' is {status['status']} with "
             f"{status['ready_nodes']}/{status['total_nodes']} nodes ready"
@@ -490,6 +544,7 @@ def get_cluster_health(name: str) -> dict[str, Any]:
         logger.info(f"Checking health for cluster '{name}'")
 
         health = _cluster_status.check_cluster_health(name)
+        health["success"] = True
         health["message"] = f"Cluster '{name}' is {'healthy' if health['healthy'] else 'unhealthy'}"
 
         return health
@@ -532,6 +587,7 @@ async def start_cluster(name: str) -> dict[str, Any]:
         logger.info(f"Starting cluster '{name}'")
 
         result = await _kind_manager.start_cluster(name)
+        result["success"] = True
         result["message"] = (
             f"Cluster '{name}' started successfully in {result['startup_time_seconds']} seconds"
         )
@@ -596,6 +652,7 @@ async def stop_cluster(name: str) -> dict[str, Any]:
         logger.info(f"Stopping cluster '{name}'")
 
         result = await _kind_manager.stop_cluster(name)
+        result["success"] = True
         result["message"] = (
             f"Cluster '{name}' stopped successfully. Data preserved. "
             f"Use start_cluster to resume."
@@ -658,6 +715,7 @@ async def restart_cluster(name: str) -> dict[str, Any]:
         logger.info(f"Restarting cluster '{name}'")
 
         result = await _kind_manager.restart_cluster(name)
+        result["success"] = True
         result["message"] = (
             f"Cluster '{name}' restarted successfully in "
             f"{result['startup_time_seconds']} seconds"
@@ -739,6 +797,7 @@ async def kubectl_get_resources(
             cluster_name, resource_type, namespace, label_selector
         )
 
+        result["success"] = True
         result["message"] = (
             f"Found {result['count']} {resource_type} in cluster '{cluster_name}', "
             f"namespace '{namespace}'"
@@ -804,6 +863,7 @@ async def kubectl_apply(
 
         result = await _kubectl_manager.apply_manifest(cluster_name, manifest, namespace)
 
+        result["success"] = True
         result["message"] = (
             f"Successfully applied {len(result['resources'])} resource(s) to "
             f"cluster '{cluster_name}', namespace '{namespace}'"
@@ -884,6 +944,7 @@ async def kubectl_delete(
             cluster_name, resource_type, name, namespace, force
         )
 
+        result["success"] = True
         return result
 
     except (KubeconfigNotFoundError, ClusterNotFoundError) as e:
@@ -955,6 +1016,7 @@ async def kubectl_logs(
             cluster_name, pod_name, namespace, container, tail_lines, previous
         )
 
+        result["success"] = True
         result["message"] = (
             f"Retrieved {result['lines']} lines of logs from pod '{pod_name}' "
             f"in cluster '{cluster_name}', namespace '{namespace}'"
@@ -1034,6 +1096,7 @@ async def kubectl_describe(
             cluster_name, resource_type, name, namespace
         )
 
+        result["success"] = True
         result["message"] = (
             f"Retrieved description for {resource_type}/{name} in cluster '{cluster_name}', "
             f"namespace '{namespace}'"

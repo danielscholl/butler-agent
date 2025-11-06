@@ -3,9 +3,12 @@
 import json
 import logging
 import subprocess
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from agent.utils.errors import ClusterNotFoundError, KindCommandError
+
+if TYPE_CHECKING:
+    from agent.config import AgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +16,13 @@ logger = logging.getLogger(__name__)
 class ClusterStatus:
     """Cluster status and health checking operations."""
 
-    def __init__(self):
-        """Initialize cluster status checker."""
-        pass
+    def __init__(self, config: "AgentConfig | None" = None):
+        """Initialize cluster status checker.
+
+        Args:
+            config: Optional AgentConfig for path resolution
+        """
+        self.config = config
 
     def get_cluster_status(self, name: str) -> dict[str, Any]:
         """Get comprehensive cluster status.
@@ -50,6 +57,15 @@ class ClusterStatus:
             except Exception as e:
                 logger.debug(f"Could not get resource usage: {e}")
                 status["resource_usage"] = None
+
+            # Detect installed addons (requires helm)
+            try:
+                addons = self.detect_addons(name)
+                if addons:
+                    status["addons"] = addons
+            except Exception as e:
+                logger.debug(f"Could not detect addons: {e}")
+                # Don't fail status check if addon detection fails
 
             return status
 
@@ -179,6 +195,136 @@ class ClusterStatus:
 
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return None
+
+    def detect_addons(self, name: str) -> dict[str, Any]:
+        """Detect installed addons via Helm or kubectl.
+
+        Checks both Helm releases and kubectl deployments to detect addons
+        regardless of installation method.
+
+        Args:
+            name: Cluster name
+
+        Returns:
+            Dict mapping addon names to their status
+        """
+        addons = {}
+        context = f"kind-{name}"
+
+        # Method 1: Check Helm releases (for addons installed via create_cluster)
+        # Use --kube-context for consistency with kubectl
+        try:
+            result = subprocess.run(
+                [
+                    "helm",
+                    "list",
+                    "--namespace",
+                    "kube-system",
+                    "--kube-context",
+                    context,
+                    "-o",
+                    "json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0:
+                releases = json.loads(result.stdout)
+                helm_addon_map = {
+                    "ingress-nginx": ["ingress-nginx", "nginx-ingress"],
+                    "metrics-server": ["metrics-server"],
+                }
+
+                for canonical_name, release_names in helm_addon_map.items():
+                    found = next((r for r in releases if r.get("name") in release_names), None)
+                    if found:
+                        addons[canonical_name] = {
+                            "installed": True,
+                            "method": "helm",
+                            "version": found.get("app_version", "unknown"),
+                            "chart": found.get("chart", "unknown"),
+                        }
+
+        except (FileNotFoundError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
+            logger.debug(f"Helm detection unavailable: {e}")
+
+        # Method 2: Check kubectl deployments (for addons installed via kubectl apply)
+        try:
+            result = subprocess.run(
+                [
+                    "kubectl",
+                    "get",
+                    "deployments",
+                    "-n",
+                    "kube-system",
+                    "--context",
+                    context,
+                    "-o",
+                    "json",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                deployment_names = {
+                    item.get("metadata", {}).get("name", "") for item in data.get("items", [])
+                }
+
+                # Check for known deployment patterns
+                kubectl_checks = {
+                    "ingress-nginx": "ingress-nginx-controller",
+                    "metrics-server": "metrics-server",
+                }
+
+                for canonical_name, deployment_name in kubectl_checks.items():
+                    # Only add if not already found via Helm
+                    if canonical_name not in addons and deployment_name in deployment_names:
+                        addons[canonical_name] = {
+                            "installed": True,
+                            "method": "kubectl",
+                        }
+
+        except (FileNotFoundError, json.JSONDecodeError, subprocess.TimeoutExpired) as e:
+            logger.debug(f"kubectl detection failed: {e}")
+
+        # Check ingress-nginx namespace too (some installs put it there)
+        if "ingress-nginx" not in addons:
+            try:
+                result = subprocess.run(
+                    [
+                        "kubectl",
+                        "get",
+                        "deployments",
+                        "-n",
+                        "ingress-nginx",
+                        "--context",
+                        context,
+                        "-o",
+                        "json",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+
+                if result.returncode == 0:
+                    data = json.loads(result.stdout)
+                    if data.get("items"):
+                        addons["ingress-nginx"] = {
+                            "installed": True,
+                            "method": "kubectl",
+                            "namespace": "ingress-nginx",
+                        }
+
+            except Exception as e:
+                logger.debug(f"ingress-nginx namespace check failed: {e}")
+
+        return addons
 
     def check_cluster_health(self, name: str) -> dict[str, Any]:
         """Check overall cluster health.

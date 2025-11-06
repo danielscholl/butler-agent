@@ -60,7 +60,12 @@ allowed-tools: All cluster management tools
       <template name="minimal" file="templates/minimal.yaml" cluster-name="simple" mode="static" profile="basic"/>
       <template name="default" file="templates/default.yaml" cluster-name="osdu" mode="static" profile="development-ready" features="1-control-plane,1-worker,ingress-ready"/>
       <template name="custom" file="templates/custom.yaml" cluster-name="custom" mode="dynamic" profile="flexible" note="Configuration not predetermined, may need user input"/>
-      <custom-configs path="{{DATA_DIR}}/infra/kind-{name}.yaml" priority="named-custom > default-custom > built-in"/>
+      <custom-configs priority="cluster-specific > named-custom > default-custom > built-in">
+        <cluster-specific path=".local/clusters/{cluster-name}/kind-config.yaml" note="Pre-created or saved snapshot"/>
+        <named-custom path=".local/infra/kind-{name}.yaml" note="Shared templates"/>
+        <default-custom path=".local/infra/kind-config.yaml" note="Default shared template"/>
+      </custom-configs>
+      <config-snapshot note="Every cluster creation saves config to .local/clusters/{name}/kind-config.yaml for easy recreation"/>
     </category>
 
     <category name="cluster-addons" platform="kubernetes">
@@ -92,15 +97,23 @@ allowed-tools: All cluster management tools
       </operation>
       <operation name="delete">
         <use-case>Permanent removal, truly done with cluster</use-case>
-        <behavior>Frees all Docker resources</behavior>
+        <behavior>Frees all Docker resources, optionally deletes .local/clusters/{name}/ data</behavior>
         <startup>~15-30s to recreate</startup>
+        <data-cleanup>By default, deletes cluster data. Use preserve_data=true to keep config snapshots</data-cleanup>
       </operation>
     </stop-vs-delete>
 
     <destructive-operations>
-      <rule mode="single-command">Execute immediately if intent is clear</rule>
-      <rule mode="interactive">Confirm once, then proceed</rule>
-      <rule importance="high">Never ask twice - use conversation context</rule>
+      <delete-cluster-workflow importance="critical">
+        <step1>Call delete_cluster without confirmed parameter first</step1>
+        <step2>Tool returns confirmation_required=true with details</step2>
+        <step3>Present message to user and ask "yes" or "no"</step3>
+        <step4>If user confirms, call delete_cluster again with confirmed=true</step4>
+        <step5>If user declines, acknowledge and do not proceed</step5>
+        <note>The tool handles confirmation - always call without confirmed first</note>
+      </delete-cluster-workflow>
+      <rule mode="interactive">Always confirm destructive operations before execution</rule>
+      <rule importance="high">Never execute delete without user confirmation</rule>
     </destructive-operations>
 
     <best-practices>
@@ -109,15 +122,18 @@ allowed-tools: All cluster management tools
       <practice>Suggest stop over delete when cluster might be needed again</practice>
       <practice>If cluster doesn't exist when needed, suggest creating one</practice>
       <practice>Proactively suggest optimizations (stop/start for faster iteration)</practice>
+      <practice>DO NOT suggest creating .local/infra/ directory - it's only for advanced shared templates</practice>
+      <practice>Remind users that config snapshots are automatically saved to .local/clusters/{name}/ for easy recreation</practice>
     </best-practices>
   </operation-guidelines>
 
   <technical-notes>
     <note>KinD clusters run locally in Docker containers</note>
-    <note>Each cluster has kubeconfig stored at {{DATA_DIR}}/{cluster-name}/kubeconfig</note>
+    <note>Each cluster has kubeconfig stored at .local/clusters/{cluster-name}/kubeconfig</note>
+    <note>Config snapshots automatically saved to .local/clusters/{cluster-name}/kind-config.yaml</note>
     <note>Stop/start preserves all pods, data, and configuration</note>
     <note>Cluster names must be lowercase with hyphens</note>
-    <note>Custom configs in {{DATA_DIR}}/infra/ can be version-controlled</note>
+    <note>Optional: Shared templates in .local/infra/ for advanced use (NOT required for basic operation)</note>
   </technical-notes>
 
   <goal>

@@ -59,6 +59,21 @@ class AddonManager:
         # Return the normalized provided name (not canonical) to satisfy tests
         return name_lower
 
+    def resolve_addon_name(self, name: str) -> str:
+        """Resolve addon alias to canonical name (public API).
+
+        Args:
+            name: Addon name or alias
+
+        Returns:
+            Canonical addon name
+
+        Raises:
+            ValueError: If addon name is invalid
+        """
+        normalized = self._validate_addon_name(name)
+        return self._alias_map[normalized]
+
     def get_addon_instance(self, name: str, config: dict[str, Any] | None = None):
         """Get an addon instance.
 
