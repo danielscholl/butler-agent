@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.10](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.9...butler-agent-v0.1.10) (2025-11-06)
+
+
+### Bug Fixes
+
+* **cluster:** adjust cluster creation success handling based on addon… ([#29](https://github.com/danielscholl/butler-agent/issues/29)) ([7381fda](https://github.com/danielscholl/butler-agent/commit/7381fdae9eda28a9f342879d25d852f754fdbaf9))
+
 ## [0.1.9](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.8...butler-agent-v0.1.9) (2025-11-06)
 
 
