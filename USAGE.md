@@ -229,24 +229,16 @@ Butler supports custom KinD configurations using YAML files. This allows you to 
 ### Configuration Discovery Priority
 
 1. **Cluster-specific config**: `.local/clusters/{cluster-name}/kind-config.yaml` (if exists)
-2. **Named custom configs**: `.local/infra/kind-{config}.yaml`
-3. **Default custom config**: `.local/infra/kind-config.yaml`
-4. **Built-in templates**: minimal, default, custom (fallback)
+2. **Built-in templates**: `minimal` (1 control-plane), `default` (1 control-plane + 1 worker)
 
 ### Setup Custom Configuration
 
-You have two options for custom configurations:
+To use a custom configuration:
+- Pre-create config file: `.local/clusters/{cluster-name}/kind-config.yaml`
+- Create cluster with the same name - automatically uses your config
+- Config snapshot automatically saved on every cluster creation for easy recreation
 
-**Option A: Cluster-specific configs** (recommended for individual clusters)
-- Pre-create config in `.local/clusters/{cluster-name}/kind-config.yaml`
-- Create cluster with same name - automatically uses your config
-- Config saved as snapshot for future recreation
-
-**Option B: Shared template configs** (for reusable templates)
-- Create in `.local/infra/` directory
-- Use across multiple clusters
-
-#### Option A: Cluster-Specific Configuration
+#### Example: Cluster-Specific Configuration
 
 ```bash
 # Create config for specific cluster
@@ -272,67 +264,6 @@ butler -p "create cluster myapp"
 - Self-contained cluster configuration
 - Easy to recreate with same config after deletion
 - Config snapshot automatically saved for all clusters
-
-#### Option B: Shared Template Configuration
-
-Create reusable templates in `.local/infra/`:
-
-**Default custom config** (`kind-config.yaml`):
-```yaml
-# .local/infra/kind-config.yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: {name}  # Placeholder - will be replaced with cluster name
-nodes:
-  - role: control-plane
-    extraPortMappings:
-      - containerPort: 80
-        hostPort: 8080
-        protocol: TCP
-  - role: worker
-  - role: worker
-```
-
-**Named custom config** (`kind-dev.yaml`, `kind-prod.yaml`, etc.):
-```yaml
-# .local/infra/kind-dev.yaml
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: {name}
-nodes:
-  - role: control-plane
-    kubeadmConfigPatches:
-      - |
-        kind: InitConfiguration
-        nodeRegistration:
-          kubeletExtraArgs:
-            node-labels: "env=dev,ingress-ready=true"
-    extraPortMappings:
-      - containerPort: 80
-        hostPort: 8080
-      - containerPort: 443
-        hostPort: 8443
-  - role: worker
-    kubeadmConfigPatches:
-      - |
-        kind: JoinConfiguration
-        nodeRegistration:
-          kubeletExtraArgs:
-            node-labels: "env=dev,workload=true"
-```
-
-#### Using Shared Templates
-
-```bash
-# Using named config (kind-dev.yaml)
-butler -p "create a cluster called myapp using dev configuration"
-
-# Using default custom config (kind-config.yaml)
-butler -p "create a default cluster called myapp"
-
-# Falls back to built-in if no custom config exists
-butler -p "create a minimal cluster called test"
-```
 
 ### Config Snapshots (Automatic)
 
@@ -361,19 +292,16 @@ butler -p "create cluster dev"
 
 ### Example Configurations
 
-See `.local/infra/kind-config.yaml.example` for a comprehensive example with:
-- Port mappings for ingress
-- Multiple worker nodes
-- Node labels
-- Networking options
-- Feature gates
+Butler includes two built-in templates:
+- **minimal**: Single control-plane node (fastest)
+- **default**: 1 control-plane + 1 worker node (development-ready)
 
 ### Configuration Best Practices
 
-1. **Version control**: Commit your `kind-*.yaml` files to git
-2. **Naming convention**: Use descriptive names (dev, staging, prod, ci)
-3. **Documentation**: Add comments explaining special configurations
-4. **Port conflicts**: Avoid overlapping host ports across configs
+1. **Version control**: Commit your cluster configs to git
+2. **Cluster-specific**: Use `.local/clusters/{name}/kind-config.yaml` for custom configs
+3. **Documentation**: Add comments in YAML explaining special configurations
+4. **Port conflicts**: Avoid overlapping host ports across clusters
 5. **Resource limits**: Consider your machine's capacity when adding nodes
 
 ## Examples
@@ -399,8 +327,8 @@ butler -p "stop dev"
 ### Testing Different Configurations
 
 ```bash
-# Create test cluster with custom config
-butler -p "create a cluster called test using dev configuration"
+# Create test cluster with minimal template
+butler -p "create a minimal cluster called test"
 
 # Check it works
 butler -p "status of test"
@@ -413,8 +341,8 @@ butler -p "delete test"
 
 ```bash
 # Create different environments
-butler -p "create a cluster called dev using dev config"
-butler -p "create a cluster called staging using prod config"
+butler -p "create a minimal cluster called dev"
+butler -p "create a default cluster called staging"
 
 # List all
 butler -p "list clusters"
@@ -544,12 +472,12 @@ butler -v -p "start {cluster-name}"  # Verbose output
 
 **Configuration not found:**
 ```bash
-# List files in infra directory
-ls -la .local/infra/
+# List cluster-specific configs
+ls -la .local/clusters/
 
-# Check file naming (must be kind-{name}.yaml)
+# Check file naming (must be kind-config.yaml in cluster directory)
 # Check YAML syntax (validate before using)
-kind create cluster --config .local/infra/kind-dev.yaml
+kind create cluster --config .local/clusters/{name}/kind-config.yaml
 ```
 
 **Port conflicts:**
@@ -576,9 +504,6 @@ lsof -i :8443
 Key configuration options:
 
 ```bash
-# Infrastructure directory for custom configs
-BUTLER_INFRA_DIR=.local/infra
-
 # Data directory for cluster files
 BUTLER_DATA_DIR=.local
 

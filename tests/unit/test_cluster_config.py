@@ -10,7 +10,7 @@ class TestClusterConfigTemplates:
 
     # Class-level constants to avoid duplication
     TEMPLATE_DIR = Path(__file__).parent.parent.parent / "src" / "agent" / "cluster" / "templates"
-    TEMPLATE_NAMES = ["minimal", "default", "custom"]
+    TEMPLATE_NAMES = ["minimal", "default"]
     TEMPLATE_FILES = [f"{name}.yaml" for name in TEMPLATE_NAMES]
 
     def test_builtin_templates_exist(self):
@@ -69,23 +69,6 @@ class TestClusterConfigTemplates:
         lines = content.strip().split("\n")
         worker_count = sum(1 for line in lines if "role: worker" in line)
         assert worker_count == 1
-
-    def test_custom_template_structure(self):
-        """Test custom template has correct structure."""
-        template_path = self.TEMPLATE_DIR / "custom.yaml"
-
-        with open(template_path) as f:
-            content = f.read()
-
-        # Custom should have control plane with ingress config and three workers
-        assert "- role: control-plane" in content
-        assert "kubeadmConfigPatches" in content
-        assert "ingress-ready=true" in content
-
-        # Should have exactly three workers
-        lines = content.strip().split("\n")
-        worker_count = sum(1 for line in lines if "role: worker" in line)
-        assert worker_count == 3
 
     def test_template_formatting(self):
         """Test that templates can be formatted with cluster name."""

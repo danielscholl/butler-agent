@@ -32,10 +32,10 @@ butler -p "start dev"
 - **Status**: Health checks, node status, and resource monitoring
 
 ### 🎛️ Custom Configurations
-- **File-based configs**: Define cluster architecture in `.local/infra/kind-*.yaml`
+- **File-based configs**: Define cluster architecture in `.local/clusters/{name}/kind-config.yaml`
 - **Version control**: Commit cluster configs alongside your code
-- **Priority-based discovery**: Named configs → Default config → Built-in templates
-- **Example configs**: Comprehensive examples included
+- **Automatic discovery**: Cluster-specific configs → Built-in templates (minimal, default)
+- **Config snapshots**: Every cluster creation saves config for easy recreation
 
 ### 🤖 AI-Powered Interface
 - **Natural language**: No command memorization needed
@@ -140,7 +140,6 @@ AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-codex
 
 # Optional
 BUTLER_DATA_DIR=.local                    # Cluster configs and data
-BUTLER_INFRA_DIR=.local/infra             # Custom KinD configs
 BUTLER_DEFAULT_K8S_VERSION=v1.34.0        # Default K8s version
 LOG_LEVEL=info                            # debug, info, warning, error
 ```

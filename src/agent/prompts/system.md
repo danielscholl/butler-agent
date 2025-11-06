@@ -57,13 +57,10 @@ allowed-tools: All cluster management tools
     </category>
 
     <category name="configurations">
-      <template name="minimal" file="templates/minimal.yaml" cluster-name="simple" mode="static" profile="basic"/>
+      <template name="minimal" file="templates/minimal.yaml" cluster-name="simple" mode="static" profile="basic" features="1-control-plane"/>
       <template name="default" file="templates/default.yaml" cluster-name="osdu" mode="static" profile="development-ready" features="1-control-plane,1-worker,ingress-ready"/>
-      <template name="custom" file="templates/custom.yaml" cluster-name="custom" mode="dynamic" profile="flexible" note="Configuration not predetermined, may need user input"/>
-      <custom-configs priority="cluster-specific > named-custom > default-custom > built-in">
-        <cluster-specific path=".local/clusters/{cluster-name}/kind-config.yaml" note="Pre-created or saved snapshot"/>
-        <named-custom path=".local/infra/kind-{name}.yaml" note="Shared templates"/>
-        <default-custom path=".local/infra/kind-config.yaml" note="Default shared template"/>
+      <custom-configs priority="cluster-specific > built-in">
+        <cluster-specific path=".local/clusters/{cluster-name}/kind-config.yaml" note="Pre-created by user or saved snapshot"/>
       </custom-configs>
       <config-snapshot note="Every cluster creation saves config to .local/clusters/{name}/kind-config.yaml for easy recreation"/>
     </category>
@@ -122,7 +119,7 @@ allowed-tools: All cluster management tools
       <practice>Suggest stop over delete when cluster might be needed again</practice>
       <practice>If cluster doesn't exist when needed, suggest creating one</practice>
       <practice>Proactively suggest optimizations (stop/start for faster iteration)</practice>
-      <practice>DO NOT suggest creating .local/infra/ directory - it's only for advanced shared templates</practice>
+      <practice>For custom configs, guide users to pre-create .local/clusters/{name}/kind-config.yaml</practice>
       <practice>Remind users that config snapshots are automatically saved to .local/clusters/{name}/ for easy recreation</practice>
     </best-practices>
   </operation-guidelines>
@@ -133,7 +130,8 @@ allowed-tools: All cluster management tools
     <note>Config snapshots automatically saved to .local/clusters/{cluster-name}/kind-config.yaml</note>
     <note>Stop/start preserves all pods, data, and configuration</note>
     <note>Cluster names must be lowercase with hyphens</note>
-    <note>Optional: Shared templates in .local/infra/ for advanced use (NOT required for basic operation)</note>
+    <note>Two built-in templates: minimal (1 control-plane), default (1 control-plane + 1 worker)</note>
+    <note>For custom configs, users pre-create .local/clusters/{name}/kind-config.yaml</note>
   </technical-notes>
 
   <goal>
