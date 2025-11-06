@@ -18,7 +18,7 @@ class TestAgentConfig:
             config = AgentConfig()
 
             assert config.llm_provider == "azure"
-            assert config.data_dir == "./data"
+            assert config.data_dir == ".local"
             assert config.cluster_prefix == "butler-"
             assert config.default_k8s_version == "v1.34.0"
             assert config.log_level == "info"
@@ -98,7 +98,7 @@ class TestAgentConfig:
             config = AgentConfig()
             path = config.get_cluster_data_dir("test-cluster")
 
-            assert path == Path("/tmp/test/test-cluster")
+            assert path == Path("/tmp/test/clusters/test-cluster")
 
     def test_get_kubeconfig_path(self):
         """Test getting kubeconfig file path."""
@@ -106,7 +106,7 @@ class TestAgentConfig:
             config = AgentConfig()
             path = config.get_kubeconfig_path("test-cluster")
 
-            assert path == Path("/tmp/test/test-cluster/kubeconfig")
+            assert path == Path("/tmp/test/clusters/test-cluster/kubeconfig")
 
     def test_get_provider_display_name(self):
         """Test getting provider display name."""

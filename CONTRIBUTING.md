@@ -46,7 +46,7 @@ AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5-codex
 
 # Optional
-BUTLER_DATA_DIR=./data
+BUTLER_DATA_DIR=.local
 BUTLER_DEFAULT_K8S_VERSION=v1.34.0
 LOG_LEVEL=info
 ```

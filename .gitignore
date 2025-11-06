@@ -2,7 +2,7 @@ ai-specs/
 ai-examples/
 ai-docs/
 
-data/
+.local/
 
 # Python
 __pycache__/
@@ -68,9 +68,9 @@ dmypy.json
 .DS_Store
 
 # Butler Agent specific
-data/
-!data/infra/.gitkeep
-!data/infra/*.example
+.local/
+!.local/infra/.gitkeep
+!.local/infra/*.example
 logs/
 *.kubeconfig
 

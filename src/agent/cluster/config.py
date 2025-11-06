@@ -87,33 +87,44 @@ def _get_template(template_name: str) -> str:
     return template
 
 
-def discover_config_file(config_name: str, infra_dir: Path) -> tuple[Path | None, str]:
+def discover_config_file(
+    config_name: str, cluster_name: str, infra_dir: Path, data_dir: Path | None = None
+) -> tuple[Path | None, str]:
     """Discover custom KinD configuration file with priority-based search.
 
     Priority order:
-    1. Named custom configs: kind-{config_name}.yaml (when config_name not in built-in templates)
-    2. Default custom config: kind-config.yaml (when config_name is "default" or "custom")
-    3. Returns None if no custom config found (triggers built-in template fallback)
+    1. Cluster-specific config: .local/clusters/{cluster_name}/kind-config.yaml
+    2. Named custom configs: kind-{config_name}.yaml (when config_name not in built-in templates)
+    3. Default custom config: kind-config.yaml (when config_name is "default" or "custom")
+    4. Returns None if no custom config found (triggers built-in template fallback)
 
     Args:
         config_name: Configuration name to discover
+        cluster_name: Name of the cluster being created
         infra_dir: Path to infrastructure directory
+        data_dir: Path to data directory (optional, for cluster-specific configs)
 
     Returns:
         Tuple of (filepath, source_description) or (None, reason) if not found
     """
-    # Ensure infra directory exists
+    # Priority 1: Cluster-specific config (pre-created by user)
+    if data_dir:
+        cluster_config = data_dir / "clusters" / cluster_name / "kind-config.yaml"
+        if cluster_config.exists():
+            return cluster_config, f"Cluster-specific config: .local/clusters/{cluster_name}/kind-config.yaml"
+
+    # Ensure infra directory exists for remaining checks
     if not infra_dir.exists():
         return None, f"Infrastructure directory does not exist: {infra_dir}"
 
-    # Priority 1: Named custom configs (when not using built-in template names)
+    # Priority 2: Named custom configs (when not using built-in template names)
     if config_name not in TEMPLATES:
         named_config = infra_dir / f"kind-{config_name}.yaml"
         if named_config.exists():
             return named_config, f"Named custom config: kind-{config_name}.yaml"
         return None, f"Named config kind-{config_name}.yaml not found"
 
-    # Priority 2: Default custom config (for "default" or "custom" templates)
+    # Priority 3: Default custom config (for "default" or "custom" templates)
     if config_name in ["default", "custom"]:
         default_config = infra_dir / "kind-config.yaml"
         if default_config.exists():
@@ -165,19 +176,25 @@ def load_config_from_file(filepath: Path, cluster_name: str) -> str:
 
 
 def get_cluster_config(
-    template: str, name: str, infra_dir: Path | None = None, **kwargs: Any
+    template: str,
+    name: str,
+    infra_dir: Path | None = None,
+    data_dir: Path | None = None,
+    **kwargs: Any,
 ) -> tuple[str, str]:
     """Generate cluster configuration with automatic discovery.
 
     Configuration discovery (automatic):
-    1. Named custom: ./data/infra/kind-{template}.yaml (when template != minimal/default/custom)
-    2. Default custom: ./data/infra/kind-config.yaml (when template = default/custom)
-    3. Built-in templates: Fallback for minimal/default/custom
+    1. Cluster-specific: .local/clusters/{name}/kind-config.yaml (if exists)
+    2. Named custom: .local/infra/kind-{template}.yaml (when template != minimal/default/custom)
+    3. Default custom: .local/infra/kind-config.yaml (when template = default/custom)
+    4. Built-in templates: Fallback for minimal/default/custom
 
     Args:
         template: Template name or custom config name
         name: Cluster name
         infra_dir: Path to infrastructure directory (optional, for custom configs)
+        data_dir: Path to data directory (optional, for cluster-specific configs)
         **kwargs: Additional template variables
 
     Returns:
@@ -192,7 +209,7 @@ def get_cluster_config(
 
     # Try to discover custom configuration file if infra_dir is provided
     if infra_dir:
-        config_path, description = discover_config_file(template, infra_dir)
+        config_path, description = discover_config_file(template, name, infra_dir, data_dir)
         if config_path:
             # Custom config found - load it
             try:

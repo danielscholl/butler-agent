@@ -228,23 +228,58 @@ Butler supports custom KinD configurations using YAML files. This allows you to 
 
 ### Configuration Discovery Priority
 
-1. **Named custom configs**: `./data/infra/kind-{config}.yaml`
-2. **Default custom config**: `./data/infra/kind-config.yaml`
-3. **Built-in templates**: minimal, default, custom (fallback)
+1. **Cluster-specific config**: `.local/clusters/{cluster-name}/kind-config.yaml` (if exists)
+2. **Named custom configs**: `.local/infra/kind-{config}.yaml`
+3. **Default custom config**: `.local/infra/kind-config.yaml`
+4. **Built-in templates**: minimal, default, custom (fallback)
 
 ### Setup Custom Configuration
 
-#### 1. Create infrastructure directory (if not exists)
+You have two options for custom configurations:
+
+**Option A: Cluster-specific configs** (recommended for individual clusters)
+- Pre-create config in `.local/clusters/{cluster-name}/kind-config.yaml`
+- Create cluster with same name - automatically uses your config
+- Config saved as snapshot for future recreation
+
+**Option B: Shared template configs** (for reusable templates)
+- Create in `.local/infra/` directory
+- Use across multiple clusters
+
+#### Option A: Cluster-Specific Configuration
 
 ```bash
-mkdir -p ./data/infra
+# Create config for specific cluster
+mkdir -p .local/clusters/myapp
+cat > .local/clusters/myapp/kind-config.yaml <<EOF
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: {name}
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 8080
+        hostPort: 8080
+  - role: worker
+EOF
+
+# Create cluster - uses your pre-created config
+butler -p "create cluster myapp"
+# ✅ Uses .local/clusters/myapp/kind-config.yaml
 ```
 
-#### 2. Create custom configuration file
+**Benefits:**
+- Self-contained cluster configuration
+- Easy to recreate with same config after deletion
+- Config snapshot automatically saved for all clusters
 
-**Option A: Default custom config** (`kind-config.yaml`)
+#### Option B: Shared Template Configuration
+
+Create reusable templates in `.local/infra/`:
+
+**Default custom config** (`kind-config.yaml`):
 ```yaml
-# ./data/infra/kind-config.yaml
+# .local/infra/kind-config.yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: {name}  # Placeholder - will be replaced with cluster name
@@ -258,9 +293,9 @@ nodes:
   - role: worker
 ```
 
-**Option B: Named custom config** (`kind-dev.yaml`, `kind-prod.yaml`, etc.)
+**Named custom config** (`kind-dev.yaml`, `kind-prod.yaml`, etc.):
 ```yaml
-# ./data/infra/kind-dev.yaml
+# .local/infra/kind-dev.yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: {name}
@@ -286,7 +321,7 @@ nodes:
             node-labels: "env=dev,workload=true"
 ```
 
-#### 3. Use custom configuration
+#### Using Shared Templates
 
 ```bash
 # Using named config (kind-dev.yaml)
@@ -299,9 +334,34 @@ butler -p "create a default cluster called myapp"
 butler -p "create a minimal cluster called test"
 ```
 
+### Config Snapshots (Automatic)
+
+Every time you create a cluster, Butler automatically saves the configuration used:
+
+```bash
+# Create any cluster
+butler -p "create cluster dev"
+
+# Config snapshot saved automatically
+# Location: .local/clusters/dev/kind-config.yaml
+
+# Delete cluster later
+butler -p "delete dev"
+
+# Recreate with same config
+butler -p "create cluster dev"
+# ✅ Automatically uses saved config from .local/clusters/dev/kind-config.yaml
+```
+
+**Benefits:**
+- No need to remember which config you used
+- Easy cluster recreation with identical settings
+- Config lives with cluster data (self-contained)
+- Can edit snapshot to customize before recreating
+
 ### Example Configurations
 
-See `./data/infra/kind-config.yaml.example` for a comprehensive example with:
+See `.local/infra/kind-config.yaml.example` for a comprehensive example with:
 - Port mappings for ingress
 - Multiple worker nodes
 - Node labels
@@ -453,12 +513,12 @@ docker ps -a --filter "label=io.x-k8s.kind.cluster"
 
 Each cluster's kubeconfig is stored in:
 ```
-./data/{cluster-name}/kubeconfig
+.local/clusters/{cluster-name}/kubeconfig
 ```
 
 Use with kubectl:
 ```bash
-export KUBECONFIG=./data/dev/kubeconfig
+export KUBECONFIG=.local/clusters/dev/kubeconfig
 kubectl get nodes
 
 # Or use context
@@ -485,11 +545,11 @@ butler -v -p "start {cluster-name}"  # Verbose output
 **Configuration not found:**
 ```bash
 # List files in infra directory
-ls -la ./data/infra/
+ls -la .local/infra/
 
 # Check file naming (must be kind-{name}.yaml)
 # Check YAML syntax (validate before using)
-kind create cluster --config ./data/infra/kind-dev.yaml
+kind create cluster --config .local/infra/kind-dev.yaml
 ```
 
 **Port conflicts:**
@@ -517,10 +577,10 @@ Key configuration options:
 
 ```bash
 # Infrastructure directory for custom configs
-BUTLER_INFRA_DIR=./data/infra
+BUTLER_INFRA_DIR=.local/infra
 
 # Data directory for cluster files
-BUTLER_DATA_DIR=./data
+BUTLER_DATA_DIR=.local
 
 # Default Kubernetes version
 BUTLER_DEFAULT_K8S_VERSION=v1.34.0

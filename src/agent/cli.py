@@ -996,6 +996,7 @@ def run_check_command() -> None:
         "docker": (["docker", "info"], True),  # (command, required)
         "kubectl": (["kubectl", "version", "--client"], False),
         "kind": (["kind", "version"], False),
+        "helm": (["helm", "version"], False),  # Optional - needed for cluster addons
     }
 
     all_passed = True

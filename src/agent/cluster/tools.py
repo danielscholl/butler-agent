@@ -104,7 +104,7 @@ async def create_cluster(
     try:
         # Get cluster configuration with automatic discovery
         cluster_config_yaml, config_source = get_cluster_config(
-            config, name, infra_dir=_config.get_infra_path()
+            config, name, infra_dir=_config.get_infra_path(), data_dir=Path(_config.data_dir)
         )
 
         # Parse YAML string to dict for manipulation
@@ -250,6 +250,12 @@ async def create_cluster(
 
                 result["kubeconfig_path"] = str(kubeconfig_path)
                 logger.info(f"Kubeconfig saved to {kubeconfig_path}")
+
+                # Save config snapshot for future recreation
+                config_snapshot_path = kubeconfig_path.parent / "kind-config.yaml"
+                config_snapshot_path.write_text(cluster_config_yaml)
+                logger.info(f"Config snapshot saved to {config_snapshot_path}")
+
             except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
                 logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
                 # Don't fail cluster creation if kubeconfig save fails
@@ -313,34 +319,79 @@ async def create_cluster(
         }
 
 
-async def delete_cluster(name: str, preserve_data: bool = True) -> dict[str, Any]:
+async def delete_cluster(
+    name: str, preserve_data: bool = False, confirmed: bool = False
+) -> dict[str, Any]:
     """Delete a KinD cluster.
 
     This tool deletes an existing KinD cluster. The cluster and all its resources
-    will be permanently removed.
+    will be permanently removed. This is a destructive operation that requires
+    user confirmation.
 
     Args:
         name: Name of the cluster to delete
-        preserve_data: Whether to preserve cluster data directory (default: True)
+        preserve_data: Whether to preserve cluster data directory (default: False)
+        confirmed: Whether user has confirmed the deletion (default: False)
 
     Returns:
         Dict containing:
         - success: Whether deletion was successful
+        - confirmation_required: If True, user confirmation needed
         - message: Status message
 
     Raises:
         ClusterNotFoundError: If cluster doesn't exist
         KindCommandError: If deletion fails
     """
-    if not _kind_manager:
+    if not _kind_manager or not _config:
         raise RuntimeError("Tools not initialized. Call initialize_tools() first.")
+
+    # Require confirmation for destructive operation
+    if not confirmed:
+        return {
+            "success": False,
+            "confirmation_required": True,
+            "cluster_name": name,
+            "preserve_data": preserve_data,
+            "message": f"Deleting cluster '{name}' is permanent. This will remove the cluster and "
+            + ("preserve" if preserve_data else "delete")
+            + f" data in .local/clusters/{name}/. Do you want to proceed?",
+        }
 
     try:
         logger.info(f"Deleting cluster '{name}' (preserve_data={preserve_data})")
 
         result = await _kind_manager.delete_cluster(name)
 
-        # TODO: Handle data directory cleanup if preserve_data=False
+        # Handle data directory cleanup if preserve_data=False
+        if not preserve_data and _config:
+            cluster_data_dir = _config.get_cluster_data_dir(name)
+            if cluster_data_dir.exists():
+                try:
+                    import shutil
+
+                    shutil.rmtree(cluster_data_dir)
+                    logger.info(f"Deleted cluster data directory: {cluster_data_dir}")
+                    result["data_deleted"] = True
+                    result["message"] = (
+                        f"Cluster '{name}' deleted successfully. "
+                        f"Data directory removed: {cluster_data_dir}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to delete cluster data directory: {e}")
+                    result["data_deleted"] = False
+                    result["message"] = (
+                        f"Cluster '{name}' deleted but failed to remove data directory: {e}"
+                    )
+            else:
+                logger.debug(f"No data directory found for cluster '{name}'")
+        else:
+            result["data_deleted"] = False
+            if preserve_data:
+                result["message"] = (
+                    f"Cluster '{name}' deleted successfully. "
+                    f"Data preserved in {_config.get_cluster_data_dir(name)}"
+                )
 
         return result
 
