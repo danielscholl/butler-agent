@@ -86,7 +86,7 @@ def _load_cluster_state(cluster_data_dir: Path) -> dict[str, Any] | None:
 
 async def create_cluster(
     name: str,
-    config: str | None = None,
+    config: str = "default",
     kubernetes_version: str | None = None,
     addons: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -228,8 +228,7 @@ async def create_cluster(
         # FIRST-TIME CREATION PATH
         logger.info(f"Creating new cluster '{name}' (first-time)")
 
-        # Use default config if not specified
-        config = config or "default"
+        # Config already defaulted to "default" in function signature
 
         # Get cluster configuration with automatic discovery
         cluster_config_yaml, config_source = get_cluster_config(
@@ -390,8 +389,12 @@ async def create_cluster(
             logger.info("Cluster state saved")
 
         except (OSError, PermissionError, KindCommandError, ClusterNotFoundError) as e:
-            logger.warning(f"Failed to save kubeconfig for cluster '{name}': {e}")
+            logger.warning(f"Failed to save kubeconfig or state for cluster '{name}': {e}")
             result["kubeconfig_path"] = None
+            result["state_save_failed"] = True
+            result["warning"] = (
+                f"Cluster created successfully but state not saved: {e}. Future restart may fail."
+            )
 
         result["config_source"] = config_source
         result["restarted"] = False
@@ -433,7 +436,9 @@ async def create_cluster(
         return {
             "success": False,
             "error": str(e),
-            "message": f"Cluster '{name}' already exists (internal error - should have been caught earlier).",
+            "message": (
+                f"Cluster '{name}' already exists. This may be due to a race condition or concurrent operation."
+            ),
         }
     except (FileNotFoundError, ValueError) as e:
         return {
@@ -544,9 +549,9 @@ async def remove_cluster(
                 except Exception as e:
                     logger.error(f"Failed to purge cluster data directory: {e}")
                     result["data_deleted"] = False
-                    result["success"] = False
+                    result["data_purge_failed"] = True
                     result["message"] = (
-                        f"Cluster '{name}' stopped but failed to purge data directory: {e}"
+                        f"Cluster '{name}' stopped successfully, but failed to purge data directory: {e}"
                     )
             else:
                 result["data_deleted"] = False

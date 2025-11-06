@@ -89,12 +89,13 @@ allowed-tools: All cluster management tools
         <first-time>Creates new cluster with specified config/addons. Saves state automatically.</first-time>
         <restart>If cluster data exists, ignores config/addons params and recreates from saved state.</restart>
         <behavior>Smart detection: checks if .local/clusters/{name}/ exists to determine path</behavior>
-        <startup-time>15-30s for both first-time and restart (full cluster recreation)</startup-time>
+        <startup-time>15-30s for both first-time and restart (full cluster recreation; previously, restart was ~5s via Docker container resume)</startup-time>
         <note>User says "create" OR "start" - both map to create_cluster(name)</note>
+        <note>Behavioral change: Restart now performs full cluster recreation, which is slower than previous (~5s) Docker container resume. This ensures cluster consistency and reliability.</note>
       </create-cluster>
 
       <remove-cluster operation="remove_cluster">
-        <stop-default>Default behavior: removes containers, preserves data. NO confirmation needed.</stop-default>
+        <stop-default>Default behavior: removes containers, preserves data. No confirmation needed.</stop-default>
         <purge-option>With purge_data=true: removes containers AND deletes all data. Requires confirmation.</purge-option>
         <behavior>Stops running cluster by removing Docker containers. Data preserved unless purging.</behavior>
         <note>User says "stop" → remove_cluster(name). User says "delete" → remove_cluster(name, purge_data=True)</note>
