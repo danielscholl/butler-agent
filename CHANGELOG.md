@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.10...butler-agent-v0.2.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** Removed support for .local/infra/ shared templates and custom template. Only minimal and default templates remain. Users must migrate configs to cluster-specific locations.
+
+### Code Refactoring
+
+* **config:** simplify cluster configuration discovery ([#32](https://github.com/danielscholl/butler-agent/issues/32)) ([f6e9f2c](https://github.com/danielscholl/butler-agent/commit/f6e9f2c42b1d520204dc18801336f34bf46a4ec1))
+
 ## [0.1.10](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.1.9...butler-agent-v0.1.10) (2025-11-06)
 
 
