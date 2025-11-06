@@ -376,8 +376,10 @@ class TestKubectlTools:
     @patch("agent.cluster.tools.ClusterStatus")
     def test_kubectl_tools_count(self, mock_status, mock_kind, mock_kubectl):
         """Test that CLUSTER_TOOLS has the expected number of tools."""
-        # 8 original tools + 5 kubectl tools = 13 total
-        assert len(tools.CLUSTER_TOOLS) == 13
+        # 5 cluster lifecycle tools + 5 kubectl tools = 10 total
+        # Cluster: create, remove, list, status, health
+        # Kubectl: get_resources, apply, delete, logs, describe
+        assert len(tools.CLUSTER_TOOLS) == 10
 
     @pytest.mark.asyncio
     async def test_kubectl_tools_not_initialized(self):

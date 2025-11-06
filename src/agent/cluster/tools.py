@@ -76,7 +76,7 @@ def _load_cluster_state(cluster_data_dir: Path) -> dict[str, Any] | None:
         return None
 
     try:
-        state = json.loads(state_file.read_text())
+        state: dict[str, Any] = json.loads(state_file.read_text())
         logger.debug(f"Loaded cluster state from {state_file}")
         return state
     except (json.JSONDecodeError, OSError) as e:
