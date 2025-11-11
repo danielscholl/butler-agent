@@ -3,8 +3,6 @@ name: Security Scanning
 on:
   push:
     branches: [ main ]
-  pull_request_target:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
   schedule:
@@ -20,22 +18,9 @@ jobs:
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request_target' || github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request'
     steps:
-      - name: Checkout PR head
-        if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v5
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
-          persist-credentials: false
-
-      - name: Checkout repository
-        if: github.event_name == 'pull_request'
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 2
+      - uses: actions/checkout@v5
 
       - uses: actions/dependency-review-action@v4
         continue-on-error: true  # Allow failure if Advanced Security not enabled
@@ -46,20 +31,7 @@ jobs:
     name: Generate SBOM
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR head
-        if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v5
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
-          persist-credentials: false
-
-      - name: Checkout repository
-        if: github.event_name != 'pull_request_target'
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 2
+      - uses: actions/checkout@v5
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -93,20 +65,7 @@ jobs:
     name: CodeQL Security Scan
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR head
-        if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v5
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Checkout repository
-        if: github.event_name != 'pull_request_target'
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v5
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
