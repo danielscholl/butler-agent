@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.2.1...butler-agent-v0.2.2) (2025-11-13)
+
+
+### Bug Fixes
+
+* Remove pull_request_target to prevent secret exfiltration ([#39](https://github.com/danielscholl/butler-agent/issues/39)) ([e84f272](https://github.com/danielscholl/butler-agent/commit/e84f27233bf18508ef9170916605578d260d9b0f))
+
 ## [0.2.1](https://github.com/danielscholl/butler-agent/compare/butler-agent-v0.2.0...butler-agent-v0.2.1) (2025-11-06)
 
 
